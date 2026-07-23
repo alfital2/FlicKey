@@ -1,0 +1,6 @@
+build/
+dist/
+DerivedData/
+xcuserdata/
+FlicKey.xcodeproj/
+*.local.*

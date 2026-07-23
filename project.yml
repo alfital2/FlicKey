@@ -1,0 +1,169 @@
+name: FlicKey
+options:
+  bundleIdPrefix: com.talalfi
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    # Sign with a stable Apple Development identity so the app's designated
+    # requirement (and thus the Accessibility/TCC grant) survives rebuilds.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "A6AC20185D24678F5BC81603F924C8D0177FB548"
+    DEVELOPMENT_TEAM: "W8FAMLK6HA"
+    PROVISIONING_PROFILE_SPECIFIER: ""
+    ENABLE_HARDENED_RUNTIME: YES
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+targets:
+  FlicKey:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+      - path: Resources/AppIcon.icns
+      - path: Resources/click-wood.wav
+      - path: Resources/click-tic.wav
+      - path: Resources/click-block.wav
+      - path: Resources/click-knock.wav
+      - path: Resources/click-double.wav
+      - path: Resources/click-majistic.wav
+      - path: Resources/click-pop.wav
+      - path: Resources/click-pluck.wav
+      - path: Resources/click-ping.wav
+      - path: Resources/click-bubble.wav
+      - path: Resources/click-keyboard.wav
+    dependencies:
+      - package: Sparkle
+    settings:
+      base:
+        INFOPLIST_FILE: Resources/Info.plist
+        CODE_SIGN_ENTITLEMENTS: FlicKey.entitlements
+        PRODUCT_BUNDLE_IDENTIFIER: com.talalfi.FlicKey
+        MARKETING_VERSION: "0.5.0"
+        CURRENT_PROJECT_VERSION: "32"
+        ENABLE_HARDENED_RUNTIME: YES
+      configs:
+        # Debug builds are QA/test builds — flag them so a "QA TEST BUILD" marker
+        # shows in Settings (and #if DEBUG diagnostics compile in).
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        # Never ship code-coverage instrumentation in the distributed build.
+        # (The test scheme's coverage gathering must not bleed into Release:
+        # it adds runtime overhead, writes .profraw files, and embeds local
+        # source paths in the binary.) Tests run under Debug, so coverage
+        # there is unaffected.
+        Release:
+          CLANG_ENABLE_CODE_COVERAGE: NO
+          CLANG_COVERAGE_MAPPING: NO
+
+  FlicKeyTests:
+    type: bundle.unit-test
+    platform: macOS
+    # Logic-layer tests: compile the testable sources directly into the test
+    # bundle so no running app host (LSUIElement agent) is required.
+    sources:
+      - path: Tests
+      - path: Sources/AppDefaults.swift
+      - path: Sources/AppFinder.swift
+      - path: Sources/AppRouting.swift
+      - path: Sources/AppRules.swift
+      - path: Sources/AutoSwitchExceptions.swift
+      - path: Sources/AutoSwitchSettings.swift
+      - path: Sources/AutoSwitchStreak.swift
+      - path: Sources/BlockedWordsSharing.swift
+      - path: Sources/BrowserURLReader.swift
+      - path: Sources/ContextMemoryStore.swift
+      - path: Sources/ConversationMemoryCore.swift
+      - path: Sources/ConversationProvider.swift
+      - path: Sources/ConversionEngine.swift
+      - path: Sources/ConversionRouter.swift
+      - path: Sources/DebugLog.swift
+      - path: Sources/DetectionHints.swift
+      - path: Sources/DiagnosticConsent.swift
+      - path: Sources/DiagnosticEvent.swift
+      - path: Sources/DiagnosticHash.swift
+      - path: Sources/DiagnosticRecorder.swift
+      - path: Sources/DoubleTapDetector.swift
+      - path: Sources/Entitlement.swift
+      - path: Sources/FocusGate.swift
+      - path: Sources/InputSourceCatalog.swift
+      - path: Sources/InputSourceManager.swift
+      - path: Sources/LayoutConverter.swift
+      - path: Sources/LayoutCue.swift
+      - path: Sources/LayoutMap.swift
+      - path: Sources/LemonSqueezy.swift
+      - path: Sources/MenuBarIcon.swift
+      - path: Sources/OnScreenSpan.swift
+      - path: Sources/OrthographyRules.swift
+      - path: Sources/PanelSession.swift
+      - path: Sources/ReportComposer.swift
+      - path: Sources/Shortcut.swift
+      - path: Sources/SiteMemoryStore.swift
+      - path: Sources/SlackConversationProvider.swift
+      - path: Sources/SoundEffect.swift
+      - path: Sources/StatsNag.swift
+      - path: Sources/SwitchStats.swift
+      - path: Sources/SpellChecking.swift
+      - path: Sources/TeamsConversationProvider.swift
+      - path: Sources/TrialLogic.swift
+      - path: Sources/TrialReminder.swift
+      - path: Sources/WelcomeTour.swift
+      - path: Sources/TypedWordTracker.swift
+      - path: Sources/TypingBuffer.swift
+      - path: Sources/WhatsNew.swift
+      - path: Sources/WordScript.swift
+      - path: Sources/WrongLayoutClassifier.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.talalfi.FlicKeyTests
+        GENERATE_INFOPLIST_FILE: YES
+
+  FlicKeyUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    # End-to-end UI tests. These drive the real app, so they take over the
+    # screen — kept in their own target/scheme (NOT the default test action)
+    # and run on demand via scripts/run-ui-tests.sh.
+    sources:
+      - path: UITests
+      # The live Teams test reuses the app's own title parser, so "is this an
+      # open chat" in the test is exactly the logic the app ships.
+      - path: Sources/ConversationProvider.swift
+      - path: Sources/TeamsConversationProvider.swift
+      - path: Sources/SlackConversationProvider.swift
+      - path: Sources/DebugLog.swift
+    dependencies:
+      - target: FlicKey
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.talalfi.FlicKeyUITests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: FlicKey
+
+schemes:
+  FlicKey:
+    build:
+      targets:
+        FlicKey: all
+    test:
+      gatherCoverageData: true
+      coverageTargets:
+        - FlicKeyTests
+      targets:
+        - FlicKeyTests
+
+  FlicKeyUITests:
+    build:
+      targets:
+        FlicKey: all
+        FlicKeyUITests: [test]
+    test:
+      targets:
+        - FlicKeyUITests
