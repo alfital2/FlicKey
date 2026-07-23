@@ -72,16 +72,13 @@ final class AutoSwitchController {
 
     func start() {
         guard AutoSwitchSettings.isEnabled else { return }
-        // Warm AppleSpell before the first real word arrives. On a cold session
-        // the first dictionary query can miss (the daemon is still loading), so
-        // the opening word of a wrong-layout run misvalidated and the whole run
-        // never armed (QA 0.5.1-diag, reproduced live). One throwaway query per
-        // enabled language forces the dictionaries up during launch instead.
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            self.classifier.warmDictionaries(
-                for: WordScript.primaryLanguages(of: InputSourceCatalog.enabledSources()))
-        }
+        // Warm AppleSpell before the first real word arrives, RETRYING across
+        // launch: at boot (login-item start) the daemon can stay cold for
+        // seconds, and a single early probe both misses and burns one of the
+        // negative-probe retries (see SystemSpellChecker). Spaced attempts let a
+        // cold daemon flip each language to a permanent positive early, while a
+        // genuinely broken dictionary converges to its stable "off".
+        warmDictionaries(attempt: 0)
         tracker.onWordCompleted = { [weak self] word, endedBySpace in
             self?.wordCompleted(word, endedBySpace: endedBySpace)
         }
@@ -116,6 +113,20 @@ final class AutoSwitchController {
             }
         }
         tracker.start()
+    }
+
+    // Spaced dictionary warm-up: probe now, then again at growing intervals while
+    // any enabled language still lacks a functional dictionary. Stops as soon as
+    // every language answers positive, or after the last attempt (at which point
+    // the negative-probe budget in SystemSpellChecker is close to final anyway).
+    private static let warmupDelays: [TimeInterval] = [0.5, 1, 2, 4, 8]
+    private func warmDictionaries(attempt: Int) {
+        let languages = WordScript.primaryLanguages(of: InputSourceCatalog.enabledSources())
+        let allFunctional = classifier.warmDictionaries(for: languages)
+        guard !allFunctional, attempt < Self.warmupDelays.count else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.warmupDelays[attempt]) { [weak self] in
+            self?.warmDictionaries(attempt: attempt + 1)
+        }
     }
 
     func stop() {

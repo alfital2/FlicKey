@@ -20,6 +20,17 @@ final class SystemSpellChecker: SpellChecking {
 
     private var functionalCache: [String: Bool] = [:]
 
+    // A NEGATIVE probe is retried this many times before it becomes final. A cold
+    // AppleSpell (login-item start at boot) answers "nothing is misspelled" until
+    // the daemon finishes loading, and permanently caching that first false
+    // silently killed one language's auto-fix for the whole session (QA repro,
+    // 10/10). Positives cache immediately; negatives re-probe on later calls
+    // until the budget is spent, so a language whose dictionary is genuinely
+    // broken (uk/el on stock machines) still converges to a stable false after a
+    // few cheap probes instead of re-probing forever.
+    private var negativeProbes: [String: Int] = [:]
+    private static let maxNegativeProbes = 8
+
     func isMisspelled(_ word: String, language: String) -> Bool {
         let range = NSSpellChecker.shared.checkSpelling(
             of: word, startingAt: 0, language: language,
@@ -41,7 +52,14 @@ final class SystemSpellChecker: SpellChecking {
         if let cached = functionalCache[language] { return cached }
         let works = NSSpellChecker.shared.availableLanguages.contains(language)
             && isMisspelled(Self.gibberish(for: language), language: language)
-        functionalCache[language] = works
+        if works {
+            functionalCache[language] = true
+            negativeProbes[language] = nil
+        } else {
+            let attempts = (negativeProbes[language] ?? 0) + 1
+            negativeProbes[language] = attempts
+            if attempts >= Self.maxNegativeProbes { functionalCache[language] = false }
+        }
         return works
     }
 

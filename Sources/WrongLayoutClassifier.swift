@@ -47,8 +47,11 @@ struct WrongLayoutClassifier {
     // Cold-start warm-up: one throwaway query per language forces AppleSpell to
     // load its dictionaries, so the FIRST real word of a session validates
     // correctly instead of missing against a daemon that is still starting.
-    func warmDictionaries(for languages: [String]) {
-        for language in languages { _ = spellChecker.hasFunctionalDictionary(language) }
+    // Returns true when every language answered with a working dictionary, so
+    // the caller can stop retrying.
+    @discardableResult
+    func warmDictionaries(for languages: [String]) -> Bool {
+        languages.allSatisfy { spellChecker.hasFunctionalDictionary($0) }
     }
     private let candidates: (String) -> [(converted: String, targetSourceID: String?)]
     private let enabledLanguages: () -> [String]
