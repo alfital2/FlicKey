@@ -29,16 +29,18 @@ enum NagController {
         DispatchQueue.main.async { showNag() }   // let launch finish first
     }
 
+    private static let panel = GentlePanel()
+
+    // Non-blocking by hard requirement: the modal NSAlert version starved the
+    // conversion pipeline while it sat (possibly invisibly) unanswered - QA
+    // proved the class on 0.5.0 and caught this exact instance on 0.5.1.
     private static func showNag() {
-        let alert = NSAlert()
-        alert.messageText = "Your 7-day FlicKey trial has ended"
-        alert.informativeText = "Good news: nothing locks - FlicKey stays fully functional, forever. "
-            + "If it saves you time, please consider supporting the project. It keeps the updates coming."
-        alert.addButton(withTitle: "Support FlicKey")
-        alert.addButton(withTitle: "Maybe later")
-        NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(LicenseStore.buyURL)
-        }
+        panel.show(
+            title: "Enjoying FlicKey?",
+            body: "FlicKey stays fully functional for you, forever - nothing locks. "
+                + "If it saves you time, please consider supporting the project. "
+                + "It keeps the updates coming.",
+            primary: "Support FlicKey", secondary: "Maybe later",
+            onPrimary: { NSWorkspace.shared.open(LicenseStore.buyURL) })
     }
 }

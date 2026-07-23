@@ -72,6 +72,16 @@ final class AutoSwitchController {
 
     func start() {
         guard AutoSwitchSettings.isEnabled else { return }
+        // Warm AppleSpell before the first real word arrives. On a cold session
+        // the first dictionary query can miss (the daemon is still loading), so
+        // the opening word of a wrong-layout run misvalidated and the whole run
+        // never armed (QA 0.5.1-diag, reproduced live). One throwaway query per
+        // enabled language forces the dictionaries up during launch instead.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.classifier.warmDictionaries(
+                for: WordScript.primaryLanguages(of: InputSourceCatalog.enabledSources()))
+        }
         tracker.onWordCompleted = { [weak self] word, endedBySpace in
             self?.wordCompleted(word, endedBySpace: endedBySpace)
         }

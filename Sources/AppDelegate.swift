@@ -125,7 +125,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: .licenseChanged, object: nil, queue: .main) { [weak self] _ in
             self?.refreshEntitlement()
         }
+        // Persist the clock-rollback ratchet for every user (not only the nag
+        // path), so setting the clock back can never revive or freeze a trial.
+        if !UITestMode.isActive { TrialManager.persistRatchet() }
+
         refreshEntitlement()
+
+        // The prior-use marker for the keychain-loss grandfather heuristic. Set
+        // strictly AFTER the entitlement decision above, so a genuinely fresh
+        // install's first load() ran with a clean defaults domain.
+        if !UITestMode.isActive { TrialManager.markLaunchCompleted() }
 
         // One-time / periodic launch surfaces, for entitled users only (never on
         // the expired paywall), strictly one per launch. Precedence: the welcome

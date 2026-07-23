@@ -16,12 +16,50 @@ enum TrialManager {
 
     static func load() -> TrialState {
         if let data = Keychain.get(service: service, account: account),
-           let state = try? JSONDecoder().decode(TrialState.self, from: data) {
+           let state = try? JSONDecoder().decode(TrialState.self, from: data),
+           state.firstRun > 0 {   // reject crafted/corrupt records (firstRun 0 = "forever")
             return state
         }
-        let fresh = TrialLogic.start(now: now())   // first ever launch
+        // No readable record. Distinguish a genuinely fresh install from an
+        // EXISTING install whose Keychain record was lost (migration, keychain
+        // reset, restore): re-stamping an old user as "first run today" would
+        // silently turn a grandfathered free-forever user into a 30-day trial -
+        // a broken promise (QA 0.5.1-diag finding). Evidence of prior use in our
+        // defaults domain means this Mac ran FlicKey before; stamp it as
+        // pre-cutoff so the grandfather clause holds. The failure direction is
+        // deliberate: when in doubt, the user gets FlicKey free.
+        let fresh: TrialState
+        if hasEvidenceOfPriorUse() {
+            fresh = TrialState(firstRun: Entitlement.grandfatherCutoff - 1, maxElapsed: 0, lastNag: 0)
+        } else {
+            fresh = TrialLogic.start(now: now())   // first ever launch
+        }
         save(fresh)
         return fresh
+    }
+
+    // Long-lived keys that only exist after real prior use of FlicKey (never
+    // written during the launch path that runs before the first load()).
+    private static func hasEvidenceOfPriorUse() -> Bool {
+        let markers = ["hasCompletedFirstLaunch", "whatsNewSeenVersion", "welcomeTourSeen",
+                       "autoSwitchExceptions", "clickSound.variant", "switchStats.autoFix",
+                       "statsNagLastMilestone", "blockedWordsLastPromptAt"]
+        return markers.contains { AppDefaults.store.object(forKey: $0) != nil }
+    }
+
+    // Marks that this install has completed a launch - the primary prior-use
+    // marker for the keychain-loss heuristic above. Called at the END of the
+    // launch path, after the first load() has already run.
+    static func markLaunchCompleted() {
+        AppDefaults.store.set(true, forKey: "hasCompletedFirstLaunch")
+    }
+
+    // Persist the clock-rollback ratchet for EVERY user at launch. Previously
+    // only the grandfathered nag path saved the ratcheted state, so a trial user
+    // could roll the clock back and freeze the trial (QA 0.5.1-diag finding).
+    static func persistRatchet() {
+        let decision = TrialLogic.decide(state: load(), now: now(), isLicensed: true)  // true = never nags
+        save(decision.newState)
     }
 
     static func save(_ state: TrialState) {

@@ -43,6 +43,13 @@ enum WrongLayoutVerdict: Equatable {
 struct WrongLayoutClassifier {
 
     private let spellChecker: SpellChecking
+
+    // Cold-start warm-up: one throwaway query per language forces AppleSpell to
+    // load its dictionaries, so the FIRST real word of a session validates
+    // correctly instead of missing against a daemon that is still starting.
+    func warmDictionaries(for languages: [String]) {
+        for language in languages { _ = spellChecker.hasFunctionalDictionary(language) }
+    }
     private let candidates: (String) -> [(converted: String, targetSourceID: String?)]
     private let enabledLanguages: () -> [String]
 

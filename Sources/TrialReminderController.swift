@@ -25,16 +25,16 @@ enum TrialReminderController {
         DispatchQueue.main.async { show(daysLeft: decision.daysLeft) }
     }
 
+    private static let panel = GentlePanel()
+
+    // Non-blocking by hard requirement (same class as the nag): a modal alert at
+    // launch starves the conversion pipeline until dismissed.
     private static func show(daysLeft: Int) {
         let copy = TrialReminder.message(daysLeft: daysLeft)
-        let alert = NSAlert()
-        alert.messageText = copy.title
-        alert.informativeText = copy.body
-        alert.addButton(withTitle: "Unlock FlicKey")
-        alert.addButton(withTitle: "Keep trying it")
-        NSApp.activate(ignoringOtherApps: true)
-        if alert.runModal() == .alertFirstButtonReturn {
-            NSWorkspace.shared.open(LicenseStore.buyURL)
-        }
+        panel.show(
+            title: copy.title,
+            body: copy.body,
+            primary: "Unlock FlicKey", secondary: "Keep trying it",
+            onPrimary: { NSWorkspace.shared.open(LicenseStore.buyURL) })
     }
 }

@@ -96,10 +96,11 @@ final class EntitlementTests: XCTestCase {
     // MARK: - Shipped cutoff matches the published Terms
 
     func testShippedCutoffMatchesTermsEffectiveDate() {
-        // The Terms' grandfather clause is effective 23 July 2026 00:00 UTC; the
-        // shipped constant must match it exactly, and the gate must behave per
+        // The Terms' grandfather clause names the calendar day 23 July 2026; the
+        // shipped constant is its most generous reading (end of that day in
+        // UTC-12), and the gate must behave per
         // the Terms on both sides of that line.
-        XCTAssertEqual(Entitlement.grandfatherCutoff, 1_784_764_800)
+        XCTAssertEqual(Entitlement.grandfatherCutoff, 1_784_894_400)
 
         let before = Entitlement.grandfatherCutoff - 60   // installed pre-launch
         XCTAssertEqual(Entitlement.decide(trial: state(firstRun: before),

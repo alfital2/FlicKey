@@ -25,7 +25,11 @@ enum Entitlement: Equatable {
     // The release date of the paid version, as epoch seconds. Anyone whose first
     // launch predates this installed under the free-forever promise and is
     // grandfathered — matching the published Terms' grandfather clause.
-    static let grandfatherCutoff = 1_784_764_800   // 2026-07-23 00:00 UTC (Terms effective date)
+    // The Terms name the calendar day "23 July 2026" with no timezone, so the
+    // code honors the most generous reading: anyone whose first launch happened
+    // before the END of 23 July in the WESTERNMOST timezone (UTC-12) is in.
+    // Ambiguity resolves toward the user, never against them.
+    static let grandfatherCutoff = 1_784_894_400   // 2026-07-24 12:00 UTC = 23 Jul 23:59 UTC-12
 
     static func decide(trial: TrialState, now: Int, isLicensed: Bool,
                        cutoff: Int = grandfatherCutoff) -> Entitlement {
