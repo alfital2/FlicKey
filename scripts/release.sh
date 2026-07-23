@@ -10,7 +10,7 @@
 #
 # To publish (the script prints these at the end):
 #   1) gh release create vX.Y.Z dist/FlicKey.dmg dist/FlicKey.zip \
-#        --repo alfital2/flickey-app -t "vX.Y.Z"
+#        --repo alfital2/FlicKey -t "vX.Y.Z"
 #   2) in the flickey-app repo: commit & push the updated appcast.xml
 #
 # The EdDSA private key lives in your login Keychain (created once by
@@ -22,7 +22,7 @@ cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 TOOLS="$ROOT/scripts/sparkle-tools/bin"
 SITE_REPO="${SITE_REPO:-$ROOT/../flickey-app}"
-DL_BASE="https://github.com/alfital2/flickey-app/releases/download"
+DL_BASE="https://github.com/alfital2/FlicKey/releases/download"
 
 VERSION="$(grep -m1 'MARKETING_VERSION'      project.yml | sed -E 's/.*"([^"]+)".*/\1/')"
 BUILD="$(  grep -m1 'CURRENT_PROJECT_VERSION' project.yml | sed -E 's/.*"([^"]+)".*/\1/')"
@@ -99,6 +99,6 @@ cat <<DONE
 
 Publish:
   1) gh release create $TAG dist/FlicKey.dmg dist/FlicKey.zip \\
-       --repo alfital2/flickey-app -t "$TAG" -n "FlicKey $VERSION"
+       --repo alfital2/FlicKey -t "$TAG" -n "FlicKey $VERSION"
   2) cd $SITE_REPO && git add appcast.xml && git commit -m "appcast: $VERSION" && git push
 DONE

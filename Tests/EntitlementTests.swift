@@ -93,14 +93,22 @@ final class EntitlementTests: XCTestCase {
         XCTAssertFalse(Entitlement.expired.coreEnabled)
     }
 
-    // MARK: - Shipped default is fail-safe
+    // MARK: - Shipped cutoff matches the published Terms
 
-    func testDefaultCutoffGrandfathersEveryoneUntilSet() {
-        // With the shipped far-future default cutoff, a brand-new install is still
-        // grandfathered — the gate can never wrongly fire before the date is set.
-        let nowish = 1_800_000_000   // ~2027, well before the 2100 default
-        let s = state(firstRun: nowish)
-        XCTAssertEqual(Entitlement.decide(trial: s, now: nowish, isLicensed: false),
+    func testShippedCutoffMatchesTermsEffectiveDate() {
+        // The Terms' grandfather clause is effective 23 July 2026 00:00 UTC; the
+        // shipped constant must match it exactly, and the gate must behave per
+        // the Terms on both sides of that line.
+        XCTAssertEqual(Entitlement.grandfatherCutoff, 1_784_764_800)
+
+        let before = Entitlement.grandfatherCutoff - 60   // installed pre-launch
+        XCTAssertEqual(Entitlement.decide(trial: state(firstRun: before),
+                                          now: before + 3600, isLicensed: false),
                        .grandfathered)
+
+        let after = Entitlement.grandfatherCutoff + 60    // fresh install post-launch
+        XCTAssertEqual(Entitlement.decide(trial: state(firstRun: after),
+                                          now: after, isLicensed: false),
+                       .trial(daysLeft: 30))
     }
 }
