@@ -152,6 +152,9 @@ enum BrowserURLReader {
     // Reduce a full URL to its registrable host, dropping a leading "www.".
     static func host(from urlString: String) -> String? {
         guard let host = URLComponents(string: urlString)?.host, !host.isEmpty else { return nil }
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        var normalized = host.lowercased()
+        if normalized.hasSuffix(".") { normalized.removeLast() }
+        guard !normalized.isEmpty else { return nil }
+        return normalized.hasPrefix("www.") ? String(normalized.dropFirst(4)) : normalized
     }
 }

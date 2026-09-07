@@ -31,6 +31,7 @@ final class LicenseSettingsViewController: NSViewController {
         activateButton.setAccessibilityIdentifier("activateLicense")
 
         buyButton.target = self; buyButton.action = #selector(buy); buyButton.bezelStyle = .rounded
+        buyButton.setAccessibilityIdentifier("buyLicense")
         removeButton.target = self; removeButton.action = #selector(remove); removeButton.bezelStyle = .rounded
 
         entryRow = NSStackView(views: [keyField, activateButton])

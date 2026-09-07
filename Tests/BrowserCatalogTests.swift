@@ -29,6 +29,14 @@ final class BrowserCatalogTests: XCTestCase {
                        .appleScript(tabPhrase: "current tab"))
     }
 
+    func testSdefMentionWithoutPropertyFallsBackToAccessibility() throws {
+        let bundle = try makeBundle(
+            filename: "Misleading Vocabulary",
+            bundleID: "test.browser.misleading",
+            sdef: Data("<dictionary><documentation>Gets the active tab when available.</documentation></dictionary>".utf8))
+        XCTAssertEqual(BrowserCatalog.strategy(forBundleAt: bundle), .accessibility)
+    }
+
     func testMissingOrUnreadableSdefFallsBackToAccessibility() throws {
         let missing = try makeBundle(filename: "Missing", bundleID: "test.browser.missing",
                                      sdef: nil, declaresSdef: true)
@@ -87,13 +95,32 @@ final class BrowserCatalogTests: XCTestCase {
         let duplicate = try makeBundle(filename: "Duplicate", bundleID: "test.browser.real")
         let agent = try makeBundle(filename: "Agent", bundleID: "test.browser.agent",
                                    extraInfo: ["LSUIElement": true])
+        let background = try makeBundle(filename: "Background", bundleID: "test.browser.background",
+                                        extraInfo: ["LSBackgroundOnly": true])
         let cacheRoot = root.appendingPathComponent("Library/Caches/tool", isDirectory: true)
         let cached = try makeBundle(filename: "Cached", bundleID: "test.browser.cached",
                                     parent: cacheRoot)
         BrowserCatalog.setApplicationURLsProviderForTesting {
-            [real, duplicate, agent, cached]
+            [real, duplicate, agent, background, cached]
         }
         XCTAssertEqual(BrowserCatalog.installed().map(\.bundleID), ["test.browser.real"])
+    }
+
+    func testInstalledPrefersApplicationsCopyAndDeduplicatesBundleIDCaseInsensitively() throws {
+        let fallback = try makeBundle(
+            filename: "Fallback",
+            bundleID: "TEST.browser.duplicate",
+            parent: root.appendingPathComponent("Build", isDirectory: true))
+        let installed = try makeBundle(
+            filename: "Installed",
+            bundleID: "test.browser.duplicate",
+            parent: root.appendingPathComponent("Applications", isDirectory: true))
+        BrowserCatalog.setApplicationURLsProviderForTesting { [fallback, installed] }
+
+        let browsers = BrowserCatalog.installed()
+        XCTAssertEqual(browsers.count, 1)
+        XCTAssertEqual(browsers[0].name, "Installed")
+        XCTAssertEqual(browsers[0].bundleID, "test.browser.duplicate")
     }
 
     func testInstalledFindsSafariOnADeveloperMac() throws {

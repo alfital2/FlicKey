@@ -1,5 +1,23 @@
 import AppKit
 
+private final class SdefCapabilityParser: NSObject, XMLParserDelegate {
+    private(set) var hasActiveTabProperty = false
+    private(set) var hasCurrentTabProperty = false
+
+    func parser(_ parser: XMLParser,
+                didStartElement elementName: String,
+                namespaceURI: String?,
+                qualifiedName qName: String?,
+                attributes attributeDict: [String: String] = [:]) {
+        guard elementName.caseInsensitiveCompare("property") == .orderedSame,
+              let name = attributeDict.first(where: {
+                  $0.key.caseInsensitiveCompare("name") == .orderedSame
+              })?.value.lowercased() else { return }
+        if name == "active tab" { hasActiveTabProperty = true }
+        if name == "current tab" { hasCurrentTabProperty = true }
+    }
+}
+
 // Stable identity for the browser TabMemory is currently following. Display
 // names are user-facing and can be localized or renamed; the bundle identifier
 // selects the read strategy/Apple Event target, and the pid selects its AX tree.
@@ -81,10 +99,17 @@ enum BrowserCatalog {
                 .appendingPathComponent(definition)
             if let handle = try? FileHandle(forReadingFrom: sdefURL) {
                 defer { try? handle.close() }
-                let data = try? handle.read(upToCount: sdefReadLimit)
-                if let data, let text = String(data: data, encoding: .utf8)?.lowercased() {
-                    if text.contains("active tab") { return .appleScript(tabPhrase: "active tab") }
-                    if text.contains("current tab") { return .appleScript(tabPhrase: "current tab") }
+                if let data = try? handle.read(upToCount: sdefReadLimit) {
+                    let capabilities = SdefCapabilityParser()
+                    let parser = XMLParser(data: data)
+                    parser.delegate = capabilities
+                    _ = parser.parse()
+                    if capabilities.hasActiveTabProperty {
+                        return .appleScript(tabPhrase: "active tab")
+                    }
+                    if capabilities.hasCurrentTabProperty {
+                        return .appleScript(tabPhrase: "current tab")
+                    }
                 }
             }
         }

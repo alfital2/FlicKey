@@ -12,6 +12,11 @@ final class BrowserURLReaderTests: XCTestCase {
                        "mail.google.com")
     }
 
+    func testHostNormalizesCaseAndDNSRootDot() {
+        XCTAssertEqual(BrowserURLReader.host(from: "https://WWW.Example.COM./path"),
+                       "example.com")
+    }
+
     func testPlainDomainWithPathAndQuery() {
         XCTAssertEqual(BrowserURLReader.host(from: "https://youtube.com/watch?v=abc"),
                        "youtube.com")

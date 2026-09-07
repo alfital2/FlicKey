@@ -1,25 +1,27 @@
 ## Status
 
-Firefox, Zen, ungoogled-chromium, and other discovered browser support is implemented on `feature/firefox-browser-support`. The production build and all 483 unit tests pass, the UI test target compiles, and live URL reads succeeded in Firefox, Zen, and ungoogled-chromium. Full Firefox UI automation still needs Accessibility access granted specifically to the Apple Development-signed debug build.
+Firefox support is implemented on `feature/firefox-browser-support` (feature commit `6908437`). A test-quality audit added regression coverage and fixes; all 486 unit tests pass, including 34 browser tests. Signed UI reruns pass the Support suite (3/3) and the previously failing shortcut preset test. The two Firefox live UI tests currently launch without an Accessibility prompt but do not observe the seeded layout switch, so that boundary still needs investigation in a clean VM.
 
 ## Recent changes
 
-- Replaced the hardcoded browser list with a cached LaunchServices catalog keyed by bundle ID, while filtering helper apps and cached browser copies found during live discovery.
-- Added a bounded, cached Accessibility URL reader for Gecko. It activates Firefox's native accessibility tree before searching and preserves the prior tab when no reliable URL is available.
-- Routed AppleScript browsers by bundle ID and retained existing per-app preferences and custom-app compatibility.
-- Added catalog, routing, reader, and Firefox UI coverage; documented Gecko requirements; bumped the project to 0.5.4 build 36.
-- Updated the original design plan with the activation and discovery findings from Firefox 155, Zen 1.22b, and ungoogled-chromium 152.
+- Replaced loose SDEF text matching with XML property parsing after a new regression test proved that documentation prose could misclassify a browser as AppleScript-capable.
+- Normalized browser hosts to lowercase and removed a DNS root dot, with a regression test for `WWW.Example.COM.`.
+- Expanded browser discovery coverage for background-only apps and case-insensitive duplicate bundle IDs, including preference for the installed Applications copy.
+- Updated stale Settings UI labels and the Support UI test's intended 30-day trial contract; added a stable accessibility identifier for the state-dependent purchase button.
+- Ran the full unit suite successfully. A signed UI run exposed stale assertions and external LNProbe modal interference; focused reruns confirmed the Support and shortcut Settings fixes.
 
 ## Open questions / blockers
 
-- The installed Developer ID release's Accessibility grant does not apply to the Apple Development-signed DerivedData build, which has a different designated requirement. Grant the debug build separately before expecting the live XCUITest suite to pass.
-- Manual checks remain for Zen split-view focus, private browsing, Gecko with `accessibility.force_disabled=1`, and rapid tab switching.
-- Unusual third-party HTTPS handlers may still appear if they are foreground apps outside known cache locations; the current filter removes all noise observed on this machine.
+- The Firefox XCUITests run under the Accessibility-authorized Developer ID identity but currently leave the input source on ABC. Determine whether launch timing, browser discovery timing, or the live AX reader is responsible; manual use had worked before this run.
+- Two TextEdit hotkey UI tests lose the TextEdit `TextView` accessibility element after firing the shortcut. Their conversion assertion remains inconclusive and appears to be test-harness instability.
+- LNProbe2 is running from `/Users/tal/Applications/LNProbe2.app` for another session and its local-network permission dialog can intercept UI automation on the host. Do not terminate it without coordinating that work.
+- The VM must grant Accessibility access to its own signed FlicKey build and have Firefox plus ABC and Hebrew-PC input sources enabled for live tests.
 
 ## Next steps
 
-1. Grant Accessibility access to the DerivedData debug FlicKey build and run `scripts/test.sh browser-ui-firefox`.
-2. Complete manual cases C12-C22 in `QA_TEST_PLAN.md`.
-3. Review the feature commit, then open a pull request and respond to GitHub issue #1.
+1. In a clean macOS VM, clone the repo, check out `feature/firefox-browser-support`, and grant Accessibility access to the exact FlicKey test-build signing identity.
+2. Reproduce `FirefoxBrowserIntegrationUITests` while collecting FlicKey logs to trace catalog discovery, AX URL reads, and routing callbacks.
+3. Stabilize or replace the stale TextEdit element assertion, then rerun the signed default UI suite.
+4. Rebuild and relaunch the Developer ID Release app after the audit commit is finalized.
 
 _Last updated: 2026-09-07 by Codex_
