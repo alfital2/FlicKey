@@ -10,6 +10,8 @@
 #                (EXPERIMENTAL/FLAKY — Safari session-restore + address-bar timing;
 #                excluded from the default UI run; proves the feature but is not
 #                reliable as a gate. The feature's logic is covered by 'browser'.)
+#   browser-ui-firefox  LIVE: the same opt-in integration flow in Firefox,
+#                exercising Gecko's Accessibility URL reader
 #   teams        Teams per-conversation parser/store + Teams session replay
 #   teams-ui     LIVE: drives real Microsoft Teams, asserts the keyboard
 #                follows the open chat (EXPERIMENTAL/FLAKY — needs Teams logged
@@ -51,11 +53,17 @@ WHOLE_UI=0     # run the entire UI scheme
 
 case "$COMPONENT" in
   browser)
-    t SiteMemoryStoreTests; t BrowserURLReaderTests
+    t SiteMemoryStoreTests; t BrowserURLReaderTests; t BrowserCatalogTests
+    t AppRulesTests/testBrowsersDefaultToAuto
+    t AppRulesTests/testDiscoveredSafariHonorsLegacyNameKeyedOverride
+    t AppRulesTests/testLegacyCustomEntryDoesNotShadowDiscoveredBrowser
+    t AppRulesTests/testBundleIDRoutingSurvivesRenamedBrowser
     t SessionReplayTests/testBrowserSession_perSiteRecallAndUnreadableUrlKeepsPriorSite
     t AppRoutingTests/testBrowserAutoRoutesToBrowser ;;
   browser-ui)
     u BrowserIntegrationUITests ;;   # LIVE: drives Safari, controls screen
+  browser-ui-firefox)
+    u FirefoxBrowserIntegrationUITests ;; # LIVE: drives Firefox, controls screen
   teams)
     t TeamsConversationProviderTests; t ContextMemoryStoreTests
     t SessionReplayTests/testRealTeamsSession_flapAndNonConversationViewsDoNotCorruptMemory
@@ -98,7 +106,7 @@ case "$COMPONENT" in
     WHOLE_UNIT=1; WHOLE_UI=1 ;;
   *)
     echo "Unknown component: '$COMPONENT'"
-    echo "Try: browser teams conversion core routing apps shortcut updates input support menubar settings ui unit all"
+    echo "Try: browser browser-ui browser-ui-firefox teams conversion core routing apps shortcut updates input support menubar settings ui unit all"
     exit 2 ;;
 esac
 
@@ -142,6 +150,7 @@ if [ "$WHOLE_UI" -eq 1 ] || [ ${#UI[@]} -gt 0 ]; then
     # 'teams-ui', never the whole-UI run.
     echo "▶ ui (all, excl. live browser/Teams)"
     run FlicKeyUITests -skip-testing:FlicKeyUITests/BrowserIntegrationUITests \
+                       -skip-testing:FlicKeyUITests/FirefoxBrowserIntegrationUITests \
                        -skip-testing:FlicKeyUITests/TeamsIntegrationUITests
   fi
 fi

@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyManager = HotkeyManager()
     private let appWatcher = AppWatcher()
     private let focusWatcher = FocusWatcher()
+    private let browserCatalogObserver = BrowserCatalogObserver()
     private let tabMemory = TabMemory()
     private let conversationMemory = AppConversationMemory()
     private let layoutCue = LayoutCueController()
@@ -49,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         statusBar = StatusBarController(tabMemory: tabMemory)
+        browserCatalogObserver.start()
         requestAccessibilityPermission()
 
         // After a conversion, switch the keyboard layout to the converted

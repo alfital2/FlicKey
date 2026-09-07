@@ -14,6 +14,7 @@ Three layers. Together they cover every aspect; each layer tests what it *can*.
 
 ```
 scripts/test.sh browser      # per-site memory + URL parsing + browser routing (headless)
+scripts/test.sh browser-ui-firefox # LIVE opt-in Gecko integration test
 scripts/test.sh teams        # Teams parser/store + Teams session replay (headless)
 scripts/test.sh conversion   # wrong-layout fix logic (headless)
 scripts/test.sh routing      # app routing + rules (headless)
@@ -26,11 +27,12 @@ scripts/test.sh ui|unit|all  # whole UI scheme / all unit / everything
 ```
 Also: `core`, `updates`, `input`. It prints a ✅/❌ summary and exits non-zero on failure.
 
-**Experimental:** `scripts/test.sh browser-ui` runs a *live* test that drives real
-Safari and asserts the keyboard physically flips per site. It proves the
-end-to-end pipeline works, but it's **flaky** (Safari session-restore +
-address-bar timing) and is **excluded from the default UI run** — it's a
-starting point, not a gate. The browser feature's *logic* is reliably covered by
+**Experimental:** `scripts/test.sh browser-ui` and
+`scripts/test.sh browser-ui-firefox` run *live* tests that drive Safari or Firefox
+and assert the keyboard physically flips per site. They prove the end-to-end
+pipelines work, but are **flaky** (browser session restore + address-bar timing)
+and are **excluded from the default UI run** — use them as a starting point, not
+a gate. The browser feature's *logic* is reliably covered by
 `scripts/test.sh browser` + the manual checklist below.
 
 > Why the functional flows are manual: they require the real Accessibility +
@@ -56,10 +58,11 @@ Run after any change that touches input switching, AppleScript, AX, or the hotke
 - [ ] ✅ The menu-bar badge switches to that language.
 
 ### 3. Per-site memory (browser)
-- [ ] In Safari/Chrome, open an English site → set keyboard to English; open a Hebrew site → set Hebrew.
+- [ ] In Safari/Chrome and Firefox/Zen, open an English site → set keyboard to English; open a Hebrew site → set Hebrew.
 - [ ] Switch between the two tabs.
 - [ ] ✅ The keyboard auto-flips to match each site.
-- [ ] (First time per browser, approve the “FlicKey wants to control Safari” prompt.)
+- [ ] Scriptable browsers show a one-time “FlicKey wants to control …” prompt. Firefox/Zen must not show an Automation prompt; they use the Accessibility grant FlicKey already requires.
+- [ ] With Firefox's `accessibility.force_disabled=1`, per-site switching quietly stops without a crash or stall.
 
 ### 4. Per-conversation memory (Teams)
 - [ ] In **Settings → Apps**, Teams shows under **Chat apps** as “Auto (per-conversation)”.

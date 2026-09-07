@@ -1,13 +1,15 @@
 import AppKit
 import ApplicationServices
 
-// Reads the active tab's URL from a scriptable browser via AppleScript and
-// reduces it to a stable domain key (e.g. "bankleumi.co.il"). Used by
-// TabMemory to remember a preferred input language per website.
+// Reads the active tab's URL through the browser's discovered capability and
+// reduces it to a stable domain key (e.g. "bankleumi.co.il"). Scriptable
+// browsers use AppleScript; Gecko and other non-scriptable browsers use their
+// Accessibility web area. Used by TabMemory for per-site language memory.
 //
 // The first call targeting a given browser triggers the macOS Automation
-// permission prompt ("…wants to control Safari"). Firefox isn't reliably
-// scriptable, so it returns nil there.
+// permission prompt ("…wants to control Safari"). Accessibility-strategy
+// browsers never receive a speculative Apple Event, avoiding a bogus Automation
+// prompt for Firefox/Zen.
 enum BrowserURLReader {
 
     // What the active tab is, from TabMemory's point of view.
@@ -27,13 +29,18 @@ enum BrowserURLReader {
         case failed          // couldn't run the script at all
     }
 
-    // Browsers we can ask for a URL, by display name. Chromium-based browsers
-    // share the "active tab of front window" vocabulary; Safari differs.
-    private static let safari = "Safari"
-    private static let unsupported: Set<String> = ["Firefox"]
-
-    static func state(forBrowserNamed name: String) -> TabState {
-        state(from: fetchURL(browserNamed: name))
+    static func state(for target: BrowserTarget) -> TabState {
+        guard let info = BrowserCatalog.info(forBundleID: target.bundleID) else {
+            return .unreadable
+        }
+        let result: ReadResult
+        switch info.strategy {
+        case .appleScript(let tabPhrase):
+            result = fetchURL(target: target, tabPhrase: tabPhrase)
+        case .accessibility:
+            result = AccessibilityURLReader.read(pid: target.pid)
+        }
+        return state(from: result)
     }
 
     // Map a read result to a tab state. `.failed` keeps the prior tab (never reset
@@ -64,7 +71,7 @@ enum BrowserURLReader {
         let newTabPrefixes = [
             "chrome://newtab", "chrome://new-tab", "chrome-search://",
             "edge://newtab", "brave://newtab",
-            "about:blank", "about:newtab", "about:home",
+            "about:blank", "about:newtab", "about:home", "about:privatebrowsing",
             "favorites://",
         ]
         return newTabPrefixes.contains { s.hasPrefix($0) }
@@ -72,10 +79,7 @@ enum BrowserURLReader {
 
     // MARK: - AppleScript
 
-    private static func fetchURL(browserNamed name: String) -> ReadResult {
-        guard !unsupported.contains(name) else { return .failed }
-
-        let tabPhrase = (name == safari) ? "current tab" : "active tab"
+    private static func fetchURL(target: BrowserTarget, tabPhrase: String) -> ReadResult {
         // Read the URL of the window the user is actually FOCUSED on. With more
         // than one browser window open, AppleScript's "front window" can resolve
         // to a DIFFERENT window than the one with keyboard focus, so FlicKey
@@ -83,14 +87,15 @@ enum BrowserURLReader {
         // tab. The focused window's title (via Accessibility) uniquely names the
         // right AppleScript window. Fall back to "front window" only if the scoped
         // read ERRORS (a blank tab answering with no URL is a valid read).
-        if let title = focusedWindowTitle(ofAppNamed: name) {
+        let escapedBundleID = appleScriptEscaped(target.bundleID)
+        if let title = focusedWindowTitle(pid: target.pid) {
             let escaped = title.replacingOccurrences(of: "\\", with: "\\\\")
                                .replacingOccurrences(of: "\"", with: "\\\"")
-            let scoped = "tell application \"\(name)\" to get URL of \(tabPhrase) of (first window whose name is \"\(escaped)\")"
+            let scoped = "tell application id \"\(escapedBundleID)\" to get URL of \(tabPhrase) of (first window whose name is \"\(escaped)\")"
             let result = run(scoped)
             if result != .failed { return result }
         }
-        return run("tell application \"\(name)\" to get URL of \(tabPhrase) of front window")
+        return run("tell application id \"\(escapedBundleID)\" to get URL of \(tabPhrase) of front window")
     }
 
     // Compiled scripts, keyed by source. NSAppleScript compiles on first execute
@@ -125,10 +130,8 @@ enum BrowserURLReader {
 
     // The title of the browser's keyboard-focused window, via Accessibility —
     // used to disambiguate which window to read when several are open.
-    private static func focusedWindowTitle(ofAppNamed name: String) -> String? {
-        guard let app = NSWorkspace.shared.runningApplications.first(where: { $0.localizedName == name })
-        else { return nil }
-        let appElement = AXUIElementCreateApplication(app.processIdentifier)
+    private static func focusedWindowTitle(pid: pid_t) -> String? {
+        let appElement = AXUIElementCreateApplication(pid)
         var windowRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
               let windowRef, CFGetTypeID(windowRef) == AXUIElementGetTypeID()
@@ -137,6 +140,11 @@ enum BrowserURLReader {
         guard AXUIElementCopyAttributeValue(windowRef as! AXUIElement, kAXTitleAttribute as CFString, &titleRef) == .success
         else { return nil }
         return titleRef as? String
+    }
+
+    private static func appleScriptEscaped(_ value: String) -> String {
+        value.replacingOccurrences(of: "\\", with: "\\\\")
+             .replacingOccurrences(of: "\"", with: "\\\"")
     }
 
     // MARK: - Domain extraction

@@ -50,8 +50,7 @@ final class AppWatcher {
         // count as "left the browser" and clear the current site.
         if app.bundleIdentifier == Bundle.main.bundleIdentifier { return }
 
-        let name = AppRules.normalizedName(app.localizedName)
-        let rule = name.isEmpty ? nil : AppRules.rule(forNormalizedName: name)
+        let rule = AppRules.rule(for: app)
         let isConversationApp = ConversationProviderRegistry.provider(forBundleID: app.bundleIdentifier) != nil
 
         let decision = AppRouting.decide(rule: rule, isConversationApp: isConversationApp)

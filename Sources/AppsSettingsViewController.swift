@@ -10,6 +10,24 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
     private weak var searchField: NSTextField?
     private weak var contentRoot: NSView?
     private var suggestionList: SuggestionListView?
+    private var browserCatalogToken: NSObjectProtocol?
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        browserCatalogToken = NotificationCenter.default.addObserver(
+            forName: .browserCatalogChanged, object: nil, queue: .main) { [weak self] _ in
+                self?.buildRows()
+            }
+    }
+
+    override func viewWillAppear() {
+        super.viewWillAppear()
+        buildRows()
+    }
+
+    deinit {
+        if let browserCatalogToken { NotificationCenter.default.removeObserver(browserCatalogToken) }
+    }
 
     override func loadView() {
         let title = NSTextField(labelWithString: "Preferred Input per App")

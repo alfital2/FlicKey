@@ -45,9 +45,20 @@ whether macOS "Automatically switch to a document's input source" is OFF.
 | C6 | Force a browser to one language | Settings→Apps: set the browser to English (not Auto) | All sites in that browser use English; per-site memory ignored | P2 |
 | C7 | Back to Auto restores per-site | Set the browser back to "Auto (per-site)" | Per-site memory works again | P2 |
 | C8 | Browser → other app → back | Switch from browser to a forced app, then back to browser | Per-site memory still applies on return | P2 |
-| C9 | First-run Automation prompt | First time on a browser, approve "FlicKey wants to control Safari" | URL read works; per-site begins functioning | P1 |
-| C10 | Multiple browsers | Repeat C1–C2 in a second browser (Chrome) | Works independently per browser | P3 |
+| C9 | First-run Automation prompt | First time in a scriptable browser, approve "FlicKey wants to control Safari" | URL read works; per-site begins functioning | P1 |
+| C10 | Multiple browsers | Repeat C1–C2 in Chrome and Firefox/Zen | Works independently per browser | P3 |
 | C11 | Rapid tab switching | Quickly switch among 3 tabs several times | Ends on the correct language for the final tab; no crash | P2 |
+| C12 | Gecko per-site memory | Repeat C1–C2 in Firefox | Keyboard flips per site; no Automation prompt | P1 |
+| C13 | Zen | Repeat C1–C2 in Zen | Same as C12 | P1 |
+| C14 | Zen split view | Put two sites side by side; click between panes | Follows the focused pane; if focus is unavailable, follows the largest pane | P2 |
+| C15 | Ungoogled Chromium | Repeat C1–C2 in Chromium.app | Works through its published AppleScript tab vocabulary | P2 |
+| C16 | Private window | Open a known site in a Firefox private window | Per-site memory applies | P2 |
+| C17 | Gecko new tab | Press ⌘T in Firefox/Zen | New-tab preference applies instead of the prior site's layout | P1 |
+| C18 | Gecko a11y disabled | Set `accessibility.force_disabled=1`, restart Firefox | No crash, hang, or beachball; per-site switching quietly pauses | P2 |
+| C19 | Discovery churn | Install/remove and launch a browser while FlicKey runs | Settings → Browsers updates on launch/mount or within the cache TTL | P2 |
+| C20 | Legacy custom entry | Upgrade with Zen saved as a custom app | Zen appears under Browsers as Auto, not as a forced app | P1 |
+| C21 | Gecko performance | Firefox with ~50 tabs; rapidly switch tabs | No beachball; warm URL reads stay cached | P2 |
+| C22 | Mixed engines | Safari → Firefox → Chromium, each on a different site | Each uses its discovered reader with no cross-talk | P2 |
 
 ## D. Per-conversation memory (Microsoft Teams)
 

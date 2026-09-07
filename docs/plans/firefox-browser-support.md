@@ -3,8 +3,25 @@
 Tracks GitHub issue [#1](https://github.com/alfital2/FlicKey/issues/1) (reporter: @abjugard, uses
 [Zen](https://zen-browser.app/); also reports ungoogled-chromium is unsupported).
 
-Status: **planned, not implemented.** Written for a follow-up dev session.
+Status: **implemented on `feature/firefox-browser-support`; unit, build, and live URL-reader
+validation complete. Full Firefox UI automation requires granting Accessibility access to the
+Apple Development-signed debug build.**
 Decisions already made by the maintainer are marked **[decided]**.
+
+Implementation review findings:
+
+- The core diagnosis and architecture were sound. Bundle-ID routing, capability
+  discovery, and a cached AX fallback fit the existing `TabMemory` lifecycle.
+- Gecko does require an activation nudge on current releases: reading the app's
+  `AXRole` activates its native Accessibility tree (verified against Firefox 155,
+  Zen 1.22b, and Mozilla's `GeckoNSApplication` implementation).
+- LaunchServices returned real discovery noise on the development Mac:
+  Hammerspoon and cached Playwright/Puppeteer Chrome builds. The implementation
+  filters background agents and cache-only app copies and deduplicates bundle IDs.
+- Live reads resolved `google.com` in Firefox and Zen through Accessibility and in
+  ungoogled-chromium through its discovered AppleScript vocabulary. The remaining
+  manual matrix is split-view focus, private browsing, disabled Gecko accessibility,
+  and rapid tab switching.
 
 ---
 
