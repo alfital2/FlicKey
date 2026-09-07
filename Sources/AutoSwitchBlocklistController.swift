@@ -3,7 +3,7 @@ import AppKit
 // A small sheet listing the words the user has taught auto-switch to leave alone,
 // with per-word removal and a clear-all. Reachable from the General → Typing pane
 // so a word blocked by mistake (e.g. an accidental double undo) is visible and
-// recoverable — important for an open-source release where nothing should be a
+// recoverable — important for a public-source release where nothing should be a
 // silent, unremovable decision.
 final class AutoSwitchBlocklistController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
 

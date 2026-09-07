@@ -28,7 +28,7 @@ enum BlockedWordsSharingStore {
 final class BlockedWordsSharingController: NSObject, NSWindowDelegate {
     static let shared = BlockedWordsSharingController()
 
-    private static let supportEmail = "flickey.support@gmail.com"
+    private static let supportEmail = "support@flickey.site"
     private var panel: NSPanel?
     private var offeredWords: [String] = []
     private var allBlocked: [String] = []

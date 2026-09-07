@@ -55,7 +55,7 @@ final class ShareSheetEmailSink: DiagnosticSink {
         }
     }
 
-    private static let supportEmail = "flickey.support@gmail.com"
+    private static let supportEmail = "support@flickey.site"
 
     private func share(_ report: DiagnosticReport, from window: NSWindow?) {
         // The body always carries the full report; the JSON is an extra attachment,

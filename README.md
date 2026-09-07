@@ -44,4 +44,4 @@ Trackpad taps use a private macOS framework (the technique comes from [HapticKey
 
 ## License
 
-The source is public under the FlicKey License (see `LICENSE.md`). In short: read it, build it for yourself, and reuse it freely. What you cannot do is publish a paid or unlocked copy of FlicKey; published derivatives must keep the purchase flow intact and use their own name and icon. If FlicKey saves you time, [a one-time purchase](https://flickey.site) keeps it maintained.
+FlicKey is **source available** — the full source is published and readable under the FlicKey License (see `LICENSE.md`), which is not an OSI-approved licence. In short: read it, build it for yourself, and reuse it freely. What you cannot do is publish a paid or unlocked copy of FlicKey; published derivatives must keep the purchase flow intact and use their own name and icon. If FlicKey saves you time, [a one-time purchase](https://flickey.site) keeps it maintained.

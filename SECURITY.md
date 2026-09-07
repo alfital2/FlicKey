@@ -4,7 +4,7 @@ FlicKey runs with Accessibility privileges and observes keystrokes to do its job
 
 ## Reporting a vulnerability
 
-Email **flickey.support@gmail.com**. Please do not open a public issue for anything you believe is exploitable; email first so a fix can ship before details are public.
+Email **support@flickey.site**. Please do not open a public issue for anything you believe is exploitable; email first so a fix can ship before details are public.
 
 Include what you found, how to reproduce it, and which FlicKey and macOS versions you tested. You can expect an acknowledgment within a few days. This is a one-person project, so complex fixes may take longer, but you will hear back and I will tell you when a fix ships.
 
