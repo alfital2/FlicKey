@@ -47,6 +47,13 @@ final class TabMemory {
     private let inputHint = InputActivityHint()
     private var pendingProbe: DispatchWorkItem?
 
+    // Firefox builds its native AX tree asynchronously after the first AXRole
+    // request. A cold read can therefore fail even though the next read tens of
+    // milliseconds later succeeds. Retry rapidly for one short, bounded burst;
+    // the 700ms poll remains the long-term backstop.
+    private var readinessRetry = AccessibilityReadinessRetrySchedule()
+    private var pendingReadinessRetry: DispatchWorkItem?
+
     func start() {
         inputMonitor.onChange = { [weak self] in
             self?.core?.inputChanged()
@@ -79,6 +86,7 @@ final class TabMemory {
                     Diag.log(.memorySaved(scope: "site", keyHash: DiagnosticHash.token(domain), source: source)) })
         }
         browserTarget = target
+        resetReadinessRetry()
         pollTimer.start()
         startHints(pid: app.processIdentifier)
         poll()   // immediate, so activation doesn't wait a whole interval
@@ -87,6 +95,7 @@ final class TabMemory {
     func leftBrowser() {
         pollTimer.stop()
         stopHints()
+        resetReadinessRetry()
         if let target = browserTarget { AccessibilityURLReader.forget(pid: target.pid) }
         browserTarget = nil
         core?.reset()
@@ -103,12 +112,16 @@ final class TabMemory {
             titleHint = TitleChangeHint(pid: pid)
             titleHint?.onHint = { [weak self] in
                 AccessibilityURLReader.clear(pid: pid)
+                self?.resetReadinessRetry()
                 self?.probeSoon()
             }
             hintedPID = pid
         }
         titleHint?.start()
-        inputHint.onHint = { [weak self] in self?.probeSoon() }
+        inputHint.onHint = { [weak self] in
+            self?.resetReadinessRetry()
+            self?.probeSoon()
+        }
         inputHint.start()
     }
 
@@ -117,6 +130,7 @@ final class TabMemory {
         inputHint.stop()
         pendingProbe?.cancel()
         pendingProbe = nil
+        resetReadinessRetry()
     }
 
     private func probeSoon() {
@@ -124,6 +138,35 @@ final class TabMemory {
         let work = DispatchWorkItem { [weak self] in self?.poll() }
         pendingProbe = work
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.probeDelay, execute: work)
+    }
+
+    private func scheduleReadinessRetry() {
+        guard pendingReadinessRetry == nil,
+              let delay = readinessRetry.takeNextDelay() else { return }
+        if DebugLog.enabled {
+            DebugLog.recovery.notice("browser AX not ready; rapid retry \(self.readinessRetry.attemptsIssued, privacy: .public)")
+        }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.pendingReadinessRetry = nil
+            self.poll()
+        }
+        pendingReadinessRetry = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+    }
+
+    private func resetReadinessRetry() {
+        pendingReadinessRetry?.cancel()
+        pendingReadinessRetry = nil
+        readinessRetry.reset()
+    }
+
+    private func markBrowserReady() {
+        let attempts = readinessRetry.attemptsIssued
+        resetReadinessRetry()
+        if attempts > 0, DebugLog.enabled {
+            DebugLog.recovery.notice("browser AX ready after \(attempts, privacy: .public) rapid retries")
+        }
     }
 
     // MARK: - Polling
@@ -148,8 +191,12 @@ final class TabMemory {
         case .unreadable:
             // Transient failure / unsupported browser / an untracked internal
             // page: keep the prior tab rather than clearing it.
+            if BrowserURLReader.usesAccessibility(for: browserTarget) {
+                scheduleReadinessRetry()
+            }
             return
         }
+        markBrowserReady()
         guard key != core.currentKey else { return }   // tab unchanged since last poll
         // The tab changed: log a short irreversible token of the key (never the
         // domain itself) + whether we have a remembered layout for it. Only on

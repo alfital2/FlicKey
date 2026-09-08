@@ -43,6 +43,16 @@ enum BrowserURLReader {
         return state(from: result)
     }
 
+    // Accessibility-backed browsers (Firefox/Gecko and discovered browsers
+    // without AppleScript tab vocabulary) can briefly lack a web area during
+    // launch or tree replacement. TabMemory uses this to add bounded rapid
+    // retries; scriptable browsers retain the ordinary polling path.
+    static func usesAccessibility(for target: BrowserTarget) -> Bool {
+        guard let info = BrowserCatalog.info(forBundleID: target.bundleID) else { return false }
+        if case .accessibility = info.strategy { return true }
+        return false
+    }
+
     // Map a read result to a tab state. `.failed` keeps the prior tab (never reset
     // a real site on a transient glitch); `.blank` (no URL) is a new tab; a value
     // is a real site unless it is a browser's internal new-tab page. Pure, so the

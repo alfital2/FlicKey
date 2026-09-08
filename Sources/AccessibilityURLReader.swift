@@ -1,6 +1,24 @@
 import ApplicationServices
 import Foundation
 
+// Pure retry policy kept separate from Dispatch so its timing and bound can be
+// unit-tested. Total rapid-retry window: 750ms; afterward normal polling wins.
+struct AccessibilityReadinessRetrySchedule {
+    static let delays: [TimeInterval] = [0.05, 0.10, 0.20, 0.40]
+    private(set) var attemptsIssued = 0
+
+    mutating func takeNextDelay() -> TimeInterval? {
+        guard attemptsIssued < Self.delays.count else { return nil }
+        let delay = Self.delays[attemptsIssued]
+        attemptsIssued += 1
+        return delay
+    }
+
+    mutating func reset() {
+        attemptsIssued = 0
+    }
+}
+
 // Firefox and Gecko forks do not publish AppleScript tab vocabulary, but their
 // selected content is available through the standard macOS Accessibility tree.
 // Current Gecko activates that tree when an AT reads the application AXRole;
@@ -40,15 +58,20 @@ enum AccessibilityURLReader {
     private static let maxDepth = 12
     private static let maxNodes = 400
     private static var cache: [pid_t: CachedArea] = [:]
-    private static var activatedPIDs = Set<pid_t>()
+    // A PID belongs here only after we have actually read a usable web area.
+    // Merely asking Gecko for AXRole is not proof that its asynchronously-built
+    // accessibility tree is ready. Caching that early attempt caused every later
+    // poll to skip the activation request until the user left and re-entered
+    // Firefox.
+    private static var readyPIDs = Set<pid_t>()
 
     static func read(pid: pid_t) -> BrowserURLReader.ReadResult {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 1.0)
-        activateTreeIfNeeded(app: app, pid: pid)
+        requestTreeActivationIfNeeded(app: app, pid: pid)
 
         guard let window = elementAttribute(app, kAXFocusedWindowAttribute) else {
-            cache[pid] = nil
+            markTreeNotReady(pid: pid)
             return .failed
         }
 
@@ -57,26 +80,39 @@ enum AccessibilityURLReader {
         // fall through to the web-area walk.
         for attribute in [kAXURLAttribute, kAXDocumentAttribute] {
             if case .result(let result) = urlAttempt(window, attribute, noValueIsBlank: false) {
+                readyPIDs.insert(pid)
                 return result
             }
         }
 
         if let cached = cache[pid], CFEqual(cached.window, window) {
             switch urlAttempt(cached.webArea, kAXURLAttribute, noValueIsBlank: true) {
-            case .result(let result): return result
-            case .invalidElement: cache[pid] = nil
-            case .unavailable: return .failed
+            case .result(let result):
+                readyPIDs.insert(pid)
+                return result
+            case .invalidElement, .unavailable:
+                // Gecko can replace its web area while leaving the old AX
+                // element technically alive but temporarily URL-less. Keeping
+                // that element cached made the failure permanent. Rediscover it
+                // now and make the tree activation request retryable.
+                markTreeNotReady(pid: pid)
+                requestTreeActivationIfNeeded(app: app, pid: pid)
             }
         } else {
             cache[pid] = nil
         }
 
-        guard let area = findActiveWebArea(in: window, app: app) else { return .failed }
+        guard let area = findActiveWebArea(in: window, app: app) else {
+            markTreeNotReady(pid: pid)
+            return .failed
+        }
         cache[pid] = CachedArea(window: window, webArea: area)
         switch urlAttempt(area, kAXURLAttribute, noValueIsBlank: true) {
-        case .result(let result): return result
+        case .result(let result):
+            readyPIDs.insert(pid)
+            return result
         case .invalidElement, .unavailable:
-            cache[pid] = nil
+            markTreeNotReady(pid: pid)
             return .failed
         }
     }
@@ -87,16 +123,22 @@ enum AccessibilityURLReader {
 
     static func forget(pid: pid_t) {
         cache[pid] = nil
-        activatedPIDs.remove(pid)
+        readyPIDs.remove(pid)
     }
 
-    private static func activateTreeIfNeeded(app: AXUIElement, pid: pid_t) {
-        guard !activatedPIDs.contains(pid) else { return }
+    private static func requestTreeActivationIfNeeded(app: AXUIElement, pid: pid_t) {
+        guard !readyPIDs.contains(pid) else { return }
         var ignored: CFTypeRef?
         // GeckoNSApplication's accessibilityRole implementation enables its
-        // native tree (Mozilla bug 1845364). Other browsers simply answer role.
+        // native tree (Mozilla bug 1845364). The request can arrive before
+        // Firefox is ready; do not cache the attempt itself. A subsequent poll
+        // must issue it again until a usable web area proves the tree is live.
         _ = AXUIElementCopyAttributeValue(app, kAXRoleAttribute as CFString, &ignored)
-        activatedPIDs.insert(pid)
+    }
+
+    private static func markTreeNotReady(pid: pid_t) {
+        cache[pid] = nil
+        readyPIDs.remove(pid)
     }
 
     private static func findActiveWebArea(in window: AXUIElement,

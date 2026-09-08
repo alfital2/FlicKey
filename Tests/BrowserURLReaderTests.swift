@@ -2,6 +2,25 @@ import XCTest
 
 final class BrowserURLReaderTests: XCTestCase {
 
+    func testAccessibilityReadinessRetriesAreFastAndBounded() {
+        var schedule = AccessibilityReadinessRetrySchedule()
+        XCTAssertEqual(schedule.takeNextDelay(), 0.05)
+        XCTAssertEqual(schedule.takeNextDelay(), 0.10)
+        XCTAssertEqual(schedule.takeNextDelay(), 0.20)
+        XCTAssertEqual(schedule.takeNextDelay(), 0.40)
+        XCTAssertNil(schedule.takeNextDelay())
+        XCTAssertEqual(schedule.attemptsIssued, 4)
+    }
+
+    func testAccessibilityReadinessRetriesResetForANewActivationOrHint() {
+        var schedule = AccessibilityReadinessRetrySchedule()
+        XCTAssertEqual(schedule.takeNextDelay(), 0.05)
+        XCTAssertEqual(schedule.takeNextDelay(), 0.10)
+        schedule.reset()
+        XCTAssertEqual(schedule.attemptsIssued, 0)
+        XCTAssertEqual(schedule.takeNextDelay(), 0.05)
+    }
+
     func testStripsSchemeAndWWW() {
         XCTAssertEqual(BrowserURLReader.host(from: "https://www.bankotsar.co.il/login?x=1"),
                        "bankotsar.co.il")
