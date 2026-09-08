@@ -119,6 +119,12 @@ final class TabMemory {
         }
         titleHint?.start()
         inputHint.onHint = { [weak self] in
+            // Gecko can leave the prior tab's AXWebArea alive after a tab click
+            // or keyboard shortcut. A probe against that cached object can read
+            // the old URL successfully forever. Switch-shaped input is direct
+            // evidence that the selected page may have changed, so rediscover
+            // the web area before the accelerated probe.
+            AccessibilityURLReader.clear(pid: pid)
             self?.resetReadinessRetry()
             self?.probeSoon()
         }
@@ -162,6 +168,12 @@ final class TabMemory {
     }
 
     private func markBrowserReady() {
+        // The observer may have been created during Gecko's cold-start window
+        // while its individual AX notification registrations were still being
+        // rejected. `start()` is idempotent and retries only missing
+        // registrations, so proving the tree readable is the right point to arm
+        // tab-change events without requiring an app focus cycle.
+        titleHint?.start()
         let attempts = readinessRetry.attemptsIssued
         resetReadinessRetry()
         if attempts > 0, DebugLog.enabled {
