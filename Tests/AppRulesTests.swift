@@ -3,8 +3,14 @@ import XCTest
 final class AppRulesTests: XCTestCase {
 
     private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins"]
-    override func setUp() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
-    override func tearDown() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
+    override func setUp() {
+        keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+        BrowserCatalog.resetApplicationURLsProviderForTesting()
+    }
+    override func tearDown() {
+        keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
+        BrowserCatalog.resetApplicationURLsProviderForTesting()
+    }
 
     func testEditableIsSortedAlphabetically() {
         let names = AppRules.editable.map { $0.name }
@@ -109,12 +115,63 @@ final class AppRulesTests: XCTestCase {
         XCTAssertTrue(AppRules.all.contains { $0.matchKey == teams.matchKey && $0.isConversationApp })
     }
 
-    func testBrowsersDefaultToAuto() {
+    func testBrowsersDefaultToAuto() throws {
         // Whatever browsers are installed should default to AUTO.
         let browsers = AppRules.all.filter { $0.isBrowser }
+        guard !browsers.isEmpty else { throw XCTSkip("no browser discovered") }
         for browser in browsers where RulesStore.overrides()[browser.matchKey] == nil {
             XCTAssertTrue(browser.rule.isAuto, "\(browser.name) should default to AUTO")
         }
+    }
+
+    func testDiscoveredSafariHonorsLegacyNameKeyedOverride() throws {
+        guard BrowserCatalog.installed().contains(where: { $0.bundleID == "com.apple.Safari" }) else {
+            throw XCTSkip("Safari was not discovered")
+        }
+        UserDefaults.standard.set(["safari": "test.layout.legacy"],
+                                  forKey: "appInputOverrides")
+        let safari = AppRules.all.first { $0.bundleID == "com.apple.Safari" }
+        XCTAssertEqual(safari?.rule, .source("test.layout.legacy"))
+    }
+
+    func testHideAndReAddDiscoveredBrowser() throws {
+        guard let browser = AppRules.all.first(where: \.isBrowser) else {
+            throw XCTSkip("no browser discovered")
+        }
+        AppRules.remove(browser)
+        XCTAssertFalse(AppRules.all.contains { $0.bundleID == browser.bundleID })
+        XCTAssertTrue(AppRules.addCustom(CustomApp(name: browser.name, bundleID: browser.bundleID)))
+        XCTAssertTrue(AppRules.all.contains { $0.bundleID == browser.bundleID && $0.isBrowser })
+    }
+
+    func testLegacyCustomEntryDoesNotShadowDiscoveredBrowser() throws {
+        guard let browser = AppRules.all.first(where: \.isBrowser) else {
+            throw XCTSkip("no browser discovered")
+        }
+        RulesStore.addCustomApp(CustomApp(name: "Legacy \(browser.name)",
+                                          bundleID: browser.bundleID))
+        let rows = AppRules.all.filter { $0.bundleID == browser.bundleID }
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertTrue(rows[0].isBrowser)
+        XCTAssertFalse(rows[0].isCustom)
+    }
+
+    func testAddingDiscoveredBrowserAsCustomIsRejected() throws {
+        guard let browser = AppRules.all.first(where: \.isBrowser) else {
+            throw XCTSkip("no browser discovered")
+        }
+        XCTAssertFalse(AppRules.addCustom(CustomApp(name: browser.name,
+                                                    bundleID: browser.bundleID)))
+    }
+
+    func testBundleIDRoutingSurvivesRenamedBrowser() throws {
+        guard let browser = AppRules.all.first(where: \.isBrowser) else {
+            throw XCTSkip("no browser discovered")
+        }
+        RulesStore.set("test.layout.forced", forMatchKey: browser.matchKey)
+        XCTAssertEqual(AppRules.rule(forBundleID: browser.bundleID,
+                                     normalizedName: "renamed browser"),
+                       .source("test.layout.forced"))
     }
 
     func testInstalledConversationAppDefaultsToPerConversationAuto() throws {

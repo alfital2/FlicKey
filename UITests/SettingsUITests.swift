@@ -23,9 +23,9 @@ final class SettingsUITests: XCTestCase {
     // button depending on macOS version — try each.
 
     func testSettingsWindowOpensWithTabs() {
-        step("Open Settings — expect General / Sound & Haptics / Shortcut / Apps / Support tabs")
+        step("Open Settings — expect General / Sound / Shortcut / Apps / Support tabs")
         XCTAssertTrue(app.tab("General").waitForExistence(timeout: 10), "General tab should appear")
-        XCTAssertTrue(app.tab("Sound & Haptics").exists, "Sound & Haptics tab should exist")
+        XCTAssertTrue(app.tab("Sound").exists, "Sound tab should exist")
         XCTAssertTrue(app.tab("Shortcut").exists, "Shortcut tab should exist")
         XCTAssertTrue(app.tab("Apps").exists, "Apps tab should exist")
         XCTAssertTrue(app.tab("Support").exists, "Support tab should exist")
@@ -46,8 +46,8 @@ final class SettingsUITests: XCTestCase {
 
     // The sound popup must be enabled exactly when the click-sound toggle is on.
     func testSoundToggleGatesTheSoundPicker() {
-        step("Sound & Haptics tab — toggle the click-sound switch, expect the picker to follow")
-        app.tab("Sound & Haptics").click()
+        step("Sound tab — toggle the click-sound switch, expect the picker to follow")
+        app.tab("Sound").click()
         let toggle = control("clickSoundSwitch")
         XCTAssertTrue(toggle.waitForExistence(timeout: 10), "sound toggle should exist")
         let popup = app.popUpButtons["clickSoundPicker"]
@@ -67,8 +67,8 @@ final class SettingsUITests: XCTestCase {
     // The per-layout tap pickers only matter while some cue output (haptic or
     // sound) is on — they must disable when both are off.
     func testLayoutSwitchCueControlsGateTheTapPickers() {
-        step("Sound & Haptics tab — layout-switch cue: toggles exist, per-layout pickers gated on either")
-        app.tab("Sound & Haptics").click()
+        step("Sound tab — layout-switch cue: toggles exist, per-layout pickers gated on either")
+        app.tab("Sound").click()
         let haptic = control("cueHapticSwitch")
         let sound = control("cueSoundSwitch")
         XCTAssertTrue(haptic.waitForExistence(timeout: 10), "cue haptic toggle should exist")
@@ -93,8 +93,8 @@ final class SettingsUITests: XCTestCase {
 
     // The haptic-intensity picker only matters while the haptic is on.
     func testHapticIntensityGatedByHapticToggle() {
-        step("Sound & Haptics — intensity picker gated on the haptic toggle")
-        app.tab("Sound & Haptics").click()
+        step("Sound — intensity picker gated on the haptic toggle")
+        app.tab("Sound").click()
         let haptic = control("cueHapticSwitch")
         XCTAssertTrue(haptic.waitForExistence(timeout: 10), "haptic toggle should exist")
         let intensity = control("hapticIntensity")

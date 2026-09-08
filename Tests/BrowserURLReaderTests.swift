@@ -12,6 +12,11 @@ final class BrowserURLReaderTests: XCTestCase {
                        "mail.google.com")
     }
 
+    func testHostNormalizesCaseAndDNSRootDot() {
+        XCTAssertEqual(BrowserURLReader.host(from: "https://WWW.Example.COM./path"),
+                       "example.com")
+    }
+
     func testPlainDomainWithPathAndQuery() {
         XCTAssertEqual(BrowserURLReader.host(from: "https://youtube.com/watch?v=abc"),
                        "youtube.com")
@@ -42,6 +47,7 @@ final class BrowserURLReaderTests: XCTestCase {
         for url in ["chrome://newtab/", "chrome://new-tab-page/",
                     "edge://newtab/", "brave://newtab/",
                     "about:blank", "about:newtab", "about:home",
+                    "about:privatebrowsing",
                     "favorites://"] {
             XCTAssertEqual(BrowserURLReader.classify(url), .newTab, "expected newTab for '\(url)'")
         }
@@ -51,6 +57,10 @@ final class BrowserURLReaderTests: XCTestCase {
         // A readable-but-not-a-website page we don't key on → keep prior, don't
         // invent a bogus site key from it.
         XCTAssertEqual(BrowserURLReader.classify("garbage with spaces"), .unreadable)
+        // Reader mode represents a real site but does not itself have a host.
+        // Preserve the prior key rather than storing an internal about: key.
+        XCTAssertEqual(BrowserURLReader.classify("about:reader?url=https://example.com"),
+                       .unreadable)
     }
 
     // MARK: - Read result → state (the missing-value-vs-error distinction)

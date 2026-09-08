@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeyManager = HotkeyManager()
     private let appWatcher = AppWatcher()
     private let focusWatcher = FocusWatcher()
+    private let browserCatalogObserver = BrowserCatalogObserver()
     private let tabMemory = TabMemory()
     private let conversationMemory = AppConversationMemory()
     private let layoutCue = LayoutCueController()
@@ -20,7 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppDefaults.useIsolatedStoreForUITests()
             // TrialManager/LicenseStore point at .uitest Keychain items in this
             // mode; clear the trial one so every UI-test run starts
-            // deterministically on "day 1 of 7", unlicensed.
+            // deterministically with all 30 trial days left, unlicensed.
             TrialManager.reset()
         }
         // UI tests: seed per-site memory into the (isolated) store. Value form:
@@ -49,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         statusBar = StatusBarController(tabMemory: tabMemory)
+        browserCatalogObserver.start()
         requestAccessibilityPermission()
 
         // After a conversion, switch the keyboard layout to the converted

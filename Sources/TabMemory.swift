@@ -26,7 +26,7 @@ import AppKit
 final class TabMemory {
 
     private let inputMonitor = InputSourceMonitor()
-    private var browserName: String?
+    private var browserTarget: BrowserTarget?
     private var core: ConversationMemoryCore?
 
     // Re-read the active tab this often while a browser is frontmost: snappy
@@ -58,9 +58,14 @@ final class TabMemory {
     // MARK: - Browser lifecycle (driven by AppWatcher)
 
     func browserActivated(_ app: NSRunningApplication) {
-        let name = app.localizedName
-        if name != browserName {
-            browserName = name
+        guard let bundleID = app.bundleIdentifier, !bundleID.isEmpty else { return }
+        let target = BrowserTarget(name: app.localizedName ?? bundleID,
+                                   bundleID: bundleID,
+                                   pid: app.processIdentifier)
+        if let prior = browserTarget, prior.pid != target.pid {
+            AccessibilityURLReader.forget(pid: prior.pid)
+        }
+        if target.bundleID != browserTarget?.bundleID {
             // Browser memory stays in SiteMemoryStore (keyed by bare domain);
             // inject it so existing per-site data is preserved.
             core = ConversationMemoryCore(
@@ -73,6 +78,7 @@ final class TabMemory {
                 onSaved: { source, domain in
                     Diag.log(.memorySaved(scope: "site", keyHash: DiagnosticHash.token(domain), source: source)) })
         }
+        browserTarget = target
         pollTimer.start()
         startHints(pid: app.processIdentifier)
         poll()   // immediate, so activation doesn't wait a whole interval
@@ -81,7 +87,8 @@ final class TabMemory {
     func leftBrowser() {
         pollTimer.stop()
         stopHints()
-        browserName = nil
+        if let target = browserTarget { AccessibilityURLReader.forget(pid: target.pid) }
+        browserTarget = nil
         core?.reset()
         core = nil
         onSiteChange?()
@@ -94,7 +101,10 @@ final class TabMemory {
         if pid != hintedPID {
             titleHint?.stop()
             titleHint = TitleChangeHint(pid: pid)
-            titleHint?.onHint = { [weak self] in self?.probeSoon() }
+            titleHint?.onHint = { [weak self] in
+                AccessibilityURLReader.clear(pid: pid)
+                self?.probeSoon()
+            }
             hintedPID = pid
         }
         titleHint?.start()
@@ -125,9 +135,9 @@ final class TabMemory {
     static let newTabDisplayName = "New Tab"
 
     private func poll() {
-        guard let browserName, let core else { return }
+        guard let browserTarget, let core else { return }
         let key: String
-        switch BrowserURLReader.state(forBrowserNamed: browserName) {
+        switch BrowserURLReader.state(for: browserTarget) {
         case .site(let domain):
             key = domain
         case .newTab:

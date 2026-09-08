@@ -55,42 +55,29 @@ enum AppRules {
 
     // langHint ("en"/"he") is resolved to one of the user's enabled input
     // sources at runtime; nil for browsers (they default to AUTO).
-    private static let defaults: [(name: String, bundleID: String, langHint: String?, isBrowser: Bool)] = [
-        ("PyCharm", "com.jetbrains.pycharm", "en", false),
-        ("WebStorm", "com.jetbrains.WebStorm", "en", false),
-        ("VSCodium", "com.vscodium", "en", false),
-        ("Xcode", "com.apple.dt.Xcode", "en", false),
-        ("LM Studio", "ai.elementlabs.lmstudio", "en", false),
-        ("Ollama", "com.electron.ollama", "en", false),
-        ("Keynote", "com.apple.Keynote", "en", false),
-        ("Numbers", "com.apple.Numbers", "en", false),
-        ("Final Cut Pro", "com.apple.FinalCut", "en", false),
-        ("Motion", "com.apple.motionapp", "en", false),
-        ("Compressor", "com.apple.Compressor", "en", false),
-        ("Logic Pro", "com.apple.logic10", "en", false),
-        ("GarageBand", "com.apple.garageband10", "en", false),
-        ("Terminal", "com.apple.Terminal", "en", false),
-        ("WhatsApp", "net.whatsapp.WhatsApp", "he", false),
-        ("Pages", "com.apple.iWork.Pages", "he", false),
-        ("zoom.us", "us.zoom.xos", "he", false),
-        // Browsers default to AUTO (per-site memory); a layout can be forced too.
-        ("Safari", "com.apple.Safari", nil, true),
-        ("Google Chrome", "com.google.Chrome", nil, true),
-        ("Microsoft Edge", "com.microsoft.edgemac", nil, true),
-        ("Brave Browser", "com.brave.Browser", nil, true),
-        ("Firefox", "org.mozilla.firefox", nil, true),
-        ("Arc", "company.thebrowser.Browser", nil, true),
-        ("Opera", "com.operasoftware.Opera", nil, true),
-        ("Vivaldi", "com.vivaldi.Vivaldi", nil, true),
+    private static let defaults: [(name: String, bundleID: String, langHint: String?)] = [
+        ("PyCharm", "com.jetbrains.pycharm", "en"),
+        ("WebStorm", "com.jetbrains.WebStorm", "en"),
+        ("VSCodium", "com.vscodium", "en"),
+        ("Xcode", "com.apple.dt.Xcode", "en"),
+        ("LM Studio", "ai.elementlabs.lmstudio", "en"),
+        ("Ollama", "com.electron.ollama", "en"),
+        ("Keynote", "com.apple.Keynote", "en"),
+        ("Numbers", "com.apple.Numbers", "en"),
+        ("Final Cut Pro", "com.apple.FinalCut", "en"),
+        ("Motion", "com.apple.motionapp", "en"),
+        ("Compressor", "com.apple.Compressor", "en"),
+        ("Logic Pro", "com.apple.logic10", "en"),
+        ("GarageBand", "com.apple.garageband10", "en"),
+        ("Terminal", "com.apple.Terminal", "en"),
+        ("WhatsApp", "net.whatsapp.WhatsApp", "he"),
+        ("Pages", "com.apple.iWork.Pages", "he"),
+        ("zoom.us", "us.zoom.xos", "he"),
     ]
 
     private static var builtinKeys: Set<String> {
-        Set(defaults.map { $0.name.lowercased() })
-    }
-
-    private static func isInstalled(_ bundleID: String) -> Bool {
-        !bundleID.isEmpty
-            && NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+        Set(defaults.map { $0.name.lowercased() }
+            + BrowserCatalog.installed().map { $0.name.lowercased() })
     }
 
     // Built-ins + custom apps, with persisted overrides applied. Built-ins the
@@ -101,19 +88,39 @@ enum AppRules {
         let sources = InputSourceCatalog.enabledSources() // resolve hints once
         var seen = Set<String>()
         var result: [AppRule] = []
+        let browsers = BrowserCatalog.installed()
+        let browserBundleIDs = Set(browsers.map { $0.bundleID.lowercased() })
 
         for entry in defaults {
             let key = entry.name.lowercased()
             seen.insert(key)
             guard !hidden.contains(key) else { continue }
-            if entry.isBrowser && !isInstalled(entry.bundleID) { continue }
             result.append(AppRule(
                 name: entry.name,
                 bundleID: entry.bundleID,
-                rule: resolveRule(overrides[key], autoByDefault: entry.isBrowser,
+                rule: resolveRule(overrides[key], autoByDefault: false,
                                   langHint: entry.langHint, sources: sources),
                 isCustom: false,
-                kind: entry.isBrowser ? .browser : .normal
+                kind: .normal
+            ))
+        }
+
+        // LaunchServices-discovered browsers occupy the same position the old
+        // hardcoded browser rows did: before custom apps, defaulting to AUTO.
+        // Keeping the display-name match key preserves existing overrides and
+        // hidden rows for Safari, Chrome, Firefox, and the other former defaults.
+        for browser in browsers {
+            let key = browser.name.lowercased()
+            guard !seen.contains(key) else { continue }
+            seen.insert(key)
+            guard !hidden.contains(key) else { continue }
+            result.append(AppRule(
+                name: browser.name,
+                bundleID: browser.bundleID,
+                rule: resolveRule(overrides[key], autoByDefault: true,
+                                  langHint: nil, sources: sources),
+                isCustom: false,
+                kind: .browser
             ))
         }
 
@@ -126,6 +133,9 @@ enum AppRules {
             // — that would route to .force and silently kill per-conversation
             // memory. Skip it; the provider owns the app below.
             if ConversationProviderRegistry.provider(forBundleID: custom.bundleID) != nil { continue }
+            // Likewise, a custom entry added before browser discovery must not
+            // force one layout for the whole browser and disable per-site memory.
+            if browserBundleIDs.contains(custom.bundleID.lowercased()) { continue }
             seen.insert(key)
             result.append(AppRule(
                 name: custom.name,
@@ -188,6 +198,24 @@ enum AppRules {
         all.first { $0.matchKey == name }?.rule
     }
 
+    // Prefer stable bundle identity for a running app. Name fallback preserves
+    // custom/built-in behavior when an old or unusual app has no bundle ID.
+    static func rule(for app: NSRunningApplication) -> InputRule? {
+        rule(forBundleID: app.bundleIdentifier,
+             normalizedName: normalizedName(app.localizedName))
+    }
+
+    static func rule(forBundleID bundleID: String?, normalizedName name: String) -> InputRule? {
+        let rules = all
+        if let bundleID,
+           let match = rules.first(where: {
+               $0.bundleID.caseInsensitiveCompare(bundleID) == .orderedSame
+           }) {
+            return match.rule
+        }
+        return name.isEmpty ? nil : rules.first { $0.matchKey == name }?.rule
+    }
+
     // App names can carry zero-width / bidi format characters; strip them and
     // lowercase so matching is stable across locales and stray Unicode. Shared
     // by AppWatcher (activation) and FocusWatcher (focus events) so both resolve
@@ -231,6 +259,15 @@ enum AppRules {
     // removed built-in instead of creating a duplicate custom entry.
     @discardableResult
     static func addCustom(_ custom: CustomApp) -> Bool {
+        // Discovered browsers own their bundle IDs and default to per-site AUTO.
+        // Re-adding a hidden browser restores its canonical discovered row.
+        if let browser = BrowserCatalog.info(forBundleID: custom.bundleID) {
+            let key = browser.name.lowercased()
+            guard RulesStore.hiddenBuiltins().contains(key) else { return false }
+            RulesStore.unhideBuiltin(matchKey: key)
+            NotificationCenter.default.post(name: .appRulesChanged, object: nil)
+            return true
+        }
         // A conversation provider (e.g. Teams) manages its app per-conversation,
         // keyed by bundle ID. Adding it as a custom entry would create a
         // duplicate row and, if given a forced language, shadow the provider and

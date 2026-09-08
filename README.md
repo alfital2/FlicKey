@@ -10,6 +10,7 @@ If you type Hebrew and English you know the moment: you write a whole sentence, 
 - Double-tap Shift converts the current text on demand.
 - Double-tap Option undoes an auto-fix and switches back. Undo the same word twice and FlicKey stops touching that word.
 - Remembers your layout per app, per website, and per chat. Move from a Hebrew WhatsApp thread to an English work chat in Teams and the keyboard follows.
+- Discovers installed browsers automatically, including Firefox, Zen, Safari, Chrome, and compatible forks.
 - Plays a click when a fix lands, with a few sounds to choose from, and can tap the trackpad so you feel the switch without looking.
 
 Everything runs locally. FlicKey has no server, no account, and it does not send what you type anywhere.
@@ -17,6 +18,8 @@ Everything runs locally. FlicKey has no server, no account, and it does not send
 ## Install
 
 Download the app from [flickey.site](https://flickey.site), drag it to Applications, and grant Accessibility access when asked. FlicKey needs Accessibility because that is the macOS mechanism for reading the text field it is fixing and for observing keystrokes. Requires macOS 13 or later.
+
+Firefox-based browsers also use macOS Accessibility to expose the selected tab's address because Gecko does not provide AppleScript tab support. If Firefox's advanced `accessibility.force_disabled` preference is set to `1`, per-site memory cannot read its tabs and quietly keeps the last known site; the rest of FlicKey continues to work.
 
 ## Build from source
 
