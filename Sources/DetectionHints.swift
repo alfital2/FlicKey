@@ -37,10 +37,14 @@ enum InputHintFilter {
     }
 }
 
-// Fires onHint when the observed app changes a window title or its focused
-// window. For browsers the window title is the page title, so a tab switch posts
-// this within milliseconds. Same AXObserver lifecycle as AppFocusObserver
-// (create, addNotification, run-loop source; balanced in stop()/deinit).
+// Fires onHint when the observed app changes a window title, focused window, or
+// focused element. For browsers the window title is the page title, so a tab
+// switch posts this within milliseconds. Focused-element changes also cover a
+// browser-chrome prompt being dismissed inside the same window: Firefox hides
+// the real page web area while such a modal is active, then exposes it without
+// necessarily changing the window or title. Same AXObserver lifecycle as
+// AppFocusObserver (create, addNotification, run-loop source; balanced in
+// stop()/deinit).
 final class TitleChangeHint {
 
     var onHint: (() -> Void)?
@@ -52,6 +56,7 @@ final class TitleChangeHint {
     private static let notifications = [
         kAXTitleChangedNotification,
         kAXFocusedWindowChangedNotification,
+        kAXFocusedUIElementChangedNotification,
     ]
 
     init(pid: pid_t) {

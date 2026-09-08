@@ -19,6 +19,47 @@ struct AccessibilityReadinessRetrySchedule {
     }
 }
 
+// An AXWebArea is safe to retain only after it identifies an actual tab. Gecko
+// can leave browser-chrome elements alive after a startup prompt is dismissed;
+// their AXURL continues to read successfully even though the selected page is
+// now represented by a different element. Keeping such an element makes the
+// stale state permanent until Firefox loses focus and TabMemory clears its AX
+// cache. This pure policy is separate so that exact lifecycle is regression-
+// tested without requiring a live browser.
+struct AccessibilityURLCachePolicy {
+    static func shouldCache(_ result: BrowserURLReader.ReadResult) -> Bool {
+        switch BrowserURLReader.state(from: result) {
+        case .site, .newTab: return true
+        case .unreadable: return false
+        }
+    }
+}
+
+struct AccessibilityWebAreaCandidateFacts {
+    let containsFocus: Bool
+    let nestingDepth: Int
+    let area: CGFloat
+    let order: Int
+}
+
+// Select the outer page, never an embedded frame. Gecko exposes iframe/widget
+// documents as nested AXWebAreas (Firefox Home currently includes one for a
+// remote content card). During cold launch neither area is focused and the outer
+// page can temporarily report 0x0 while the child already has a size, so the old
+// largest-area fallback could identify the child service as the active site.
+enum AccessibilityWebAreaSelection {
+    static func preferredIndex(in candidates: [AccessibilityWebAreaCandidateFacts]) -> Int? {
+        candidates.indices.min { lhsIndex, rhsIndex in
+            let lhs = candidates[lhsIndex]
+            let rhs = candidates[rhsIndex]
+            if lhs.containsFocus != rhs.containsFocus { return lhs.containsFocus }
+            if lhs.nestingDepth != rhs.nestingDepth { return lhs.nestingDepth < rhs.nestingDepth }
+            if lhs.area != rhs.area { return lhs.area > rhs.area }
+            return lhs.order < rhs.order
+        }
+    }
+}
+
 // Firefox and Gecko forks do not publish AppleScript tab vocabulary, but their
 // selected content is available through the standard macOS Accessibility tree.
 // Current Gecko activates that tree when an AT reads the application AXRole;
@@ -40,12 +81,13 @@ enum AccessibilityURLReader {
     private struct QueueNode {
         let element: AXUIElement
         let depth: Int
-        let containingArea: Int?
+        let containingAreas: [Int]
     }
 
     private struct Candidate {
         let element: AXUIElement
         var containsFocus: Bool
+        let nestingDepth: Int
         let order: Int
     }
 
@@ -80,16 +122,29 @@ enum AccessibilityURLReader {
         // fall through to the web-area walk.
         for attribute in [kAXURLAttribute, kAXDocumentAttribute] {
             if case .result(let result) = urlAttempt(window, attribute, noValueIsBlank: false) {
-                readyPIDs.insert(pid)
-                return result
+                if AccessibilityURLCachePolicy.shouldCache(result) {
+                    readyPIDs.insert(pid)
+                    return result
+                }
+                // A window-level browser-chrome URL is not the selected tab.
+                // Continue into the web-area search instead of declaring the
+                // accessibility tree ready.
+                markTreeNotReady(pid: pid)
             }
         }
 
         if let cached = cache[pid], CFEqual(cached.window, window) {
             switch urlAttempt(cached.webArea, kAXURLAttribute, noValueIsBlank: true) {
             case .result(let result):
-                readyPIDs.insert(pid)
-                return result
+                if AccessibilityURLCachePolicy.shouldCache(result) {
+                    readyPIDs.insert(pid)
+                    return result
+                }
+                // A successful read is not enough: Firefox browser chrome has
+                // a URL too, and its dismissed prompt element can stay readable
+                // forever. Discard it and walk the current window again.
+                markTreeNotReady(pid: pid)
+                requestTreeActivationIfNeeded(app: app, pid: pid)
             case .invalidElement, .unavailable:
                 // Gecko can replace its web area while leaving the old AX
                 // element technically alive but temporarily URL-less. Keeping
@@ -109,6 +164,10 @@ enum AccessibilityURLReader {
         cache[pid] = CachedArea(window: window, webArea: area)
         switch urlAttempt(area, kAXURLAttribute, noValueIsBlank: true) {
         case .result(let result):
+            guard AccessibilityURLCachePolicy.shouldCache(result) else {
+                markTreeNotReady(pid: pid)
+                return .failed
+            }
             readyPIDs.insert(pid)
             return result
         case .invalidElement, .unavailable:
@@ -144,23 +203,30 @@ enum AccessibilityURLReader {
     private static func findActiveWebArea(in window: AXUIElement,
                                           app: AXUIElement) -> AXUIElement? {
         let focused = elementAttribute(app, kAXFocusedUIElementAttribute)
-        var queue = [QueueNode(element: window, depth: 0, containingArea: nil)]
+        var queue = [QueueNode(element: window, depth: 0, containingAreas: [])]
         var cursor = 0
         var candidates: [Candidate] = []
 
         while cursor < queue.count && cursor < maxNodes {
             let node = queue[cursor]
             cursor += 1
-            var containingArea = node.containingArea
+            var containingAreas = node.containingAreas
 
             if stringAttribute(node.element, kAXRoleAttribute) == "AXWebArea" {
-                containingArea = candidates.count
+                let index = candidates.count
                 candidates.append(Candidate(element: node.element,
                                             containsFocus: false,
-                                            order: candidates.count))
+                                            nestingDepth: containingAreas.count,
+                                            order: index))
+                containingAreas.append(index)
             }
-            if let focused, let index = containingArea, CFEqual(node.element, focused) {
-                candidates[index].containsFocus = true
+            if let focused, CFEqual(node.element, focused) {
+                // A focused node inside an iframe belongs to both the embedded
+                // AXWebArea and its outer tab. Mark the full ancestry; ranking
+                // then deliberately prefers the outermost focused page.
+                for index in containingAreas {
+                    candidates[index].containsFocus = true
+                }
             }
 
             guard node.depth < maxDepth else { continue }
@@ -168,17 +234,18 @@ enum AccessibilityURLReader {
                 where queue.count < maxNodes {
                 queue.append(QueueNode(element: child,
                                        depth: node.depth + 1,
-                                       containingArea: containingArea))
+                                       containingAreas: containingAreas))
             }
         }
 
-        if let focusedArea = candidates.first(where: \.containsFocus) { return focusedArea.element }
-        return candidates.max {
-            let lhs = area(of: $0.element)
-            let rhs = area(of: $1.element)
-            if lhs == rhs { return $0.order > $1.order }
-            return lhs < rhs
-        }?.element
+        let facts = candidates.map {
+            AccessibilityWebAreaCandidateFacts(containsFocus: $0.containsFocus,
+                                               nestingDepth: $0.nestingDepth,
+                                               area: area(of: $0.element),
+                                               order: $0.order)
+        }
+        guard let index = AccessibilityWebAreaSelection.preferredIndex(in: facts) else { return nil }
+        return candidates[index].element
     }
 
     private static func urlAttempt(_ element: AXUIElement,

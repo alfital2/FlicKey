@@ -68,6 +68,16 @@ enum BrowserURLReader {
     // Classify a non-empty URL string a browser returned.
     static func classify(_ urlString: String) -> TabState {
         if isNewTabURL(urlString) { return .newTab }
+        // Browser chrome can itself contain an AXWebArea. Firefox's startup
+        // prompts are a concrete example: the default-browser dialog reports
+        // `chrome://global/content/commonDialog.xhtml` while hiding the page's
+        // web area. URLComponents gives that internal URL a perfectly valid
+        // host (`global`), so accepting every host invents a bogus website and
+        // makes TabMemory stop its readiness/recovery probes. Per-site memory
+        // is meaningful only for network pages; keep all other browser-internal
+        // schemes unreadable until the actual tab is exposed again.
+        guard let scheme = URLComponents(string: urlString)?.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return .unreadable }
         if let host = host(from: urlString) { return .site(host) }
         return .unreadable   // readable but not a site we track → keep prior
     }
