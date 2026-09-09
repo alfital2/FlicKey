@@ -43,6 +43,15 @@ private func size(_ element: AXUIElement) -> CGSize? {
     return result
 }
 
+private func point(_ element: AXUIElement) -> CGPoint? {
+    guard let raw = value(element, kAXPositionAttribute), CFGetTypeID(raw) == AXValueGetTypeID() else {
+        return nil
+    }
+    var result = CGPoint.zero
+    guard AXValueGetValue(raw as! AXValue, .cgPoint, &result) else { return nil }
+    return result
+}
+
 private func sameElement(_ lhs: AXUIElement, _ rhs: AXUIElement) -> Bool {
     CFEqual(lhs, rhs)
 }
@@ -81,6 +90,23 @@ private func webAreas(from window: AXUIElement) -> (areas: [FoundWebArea], visit
     return (found, cursor)
 }
 
+private func dumpTree(from root: AXUIElement) {
+    var queue: [(AXUIElement, Int)] = [(root, 0)]
+    var cursor = 0
+    while cursor < queue.count && cursor < maxNodes {
+        let (element, depth) = queue[cursor]
+        cursor += 1
+        let title = string(value(element, kAXTitleAttribute)) ?? ""
+        let description = string(value(element, kAXDescriptionAttribute)) ?? ""
+        let identifier = string(value(element, kAXIdentifierAttribute)) ?? ""
+        print("tree[\(cursor - 1)] depth=\(depth) role=\(role(element)) title=\(title) description=\(description) id=\(identifier)")
+        guard depth < maxDepth else { continue }
+        for child in children(element) where queue.count < maxNodes {
+            queue.append((child, depth + 1))
+        }
+    }
+}
+
 private func probe(bundleID: String, label: String) {
     guard let app = NSWorkspace.shared.runningApplications.first(where: {
         $0.bundleIdentifier == bundleID
@@ -95,6 +121,11 @@ private func probe(bundleID: String, label: String) {
     // application's role (Mozilla bug 1845364 / GeckoNSApplication+a11y).
     let appRole = string(value(appElement, kAXRoleAttribute)) ?? "nil"
     Thread.sleep(forTimeInterval: 0.25)
+    let appWindows = value(appElement, kAXWindowsAttribute) as? [AXUIElement] ?? []
+    let mainWindow = value(appElement, kAXMainWindowAttribute).flatMap { raw -> AXUIElement? in
+        guard CFGetTypeID(raw) == AXUIElementGetTypeID() else { return nil }
+        return (raw as! AXUIElement)
+    }
     var windowRef: CFTypeRef?
     let windowError = AXUIElementCopyAttributeValue(
         appElement, kAXFocusedWindowAttribute as CFString, &windowRef)
@@ -112,6 +143,11 @@ private func probe(bundleID: String, label: String) {
 
     print("\n=== \(label) (\(bundleID), pid \(app.processIdentifier)) ===")
     print("application role (activation read): \(appRole)")
+    print("application windows: \(appWindows.count)")
+    for (index, candidateWindow) in appWindows.enumerated() {
+        let isMain = mainWindow.map { sameElement(candidateWindow, $0) } ?? false
+        print("  window[\(index)] title=\(string(value(candidateWindow, kAXTitleAttribute)) ?? "nil") role=\(role(candidateWindow)) subrole=\(string(value(candidateWindow, kAXSubroleAttribute)) ?? "nil") main=\(isMain)")
+    }
     print("window title:    \(string(value(window, kAXTitleAttribute)) ?? "nil")")
     print("window document: \(string(value(window, kAXDocumentAttribute)) ?? "nil")")
     print("window URL:      \(string(value(window, kAXURLAttribute)) ?? "nil")")
@@ -120,11 +156,13 @@ private func probe(bundleID: String, label: String) {
     let scan = webAreas(from: window)
     let elapsedMS = (CFAbsoluteTimeGetCurrent() - started) * 1_000
     print("BFS: \(scan.visited) nodes, \(scan.areas.count) web areas, \(String(format: "%.2f", elapsedMS)) ms")
+    if CommandLine.arguments.contains("--tree") { dumpTree(from: window) }
 
     for (index, area) in scan.areas.enumerated() {
         var focusBudget = maxNodes
         let hasFocus = focused.map { contains(area.element, target: $0, budget: &focusBudget) } ?? false
         let dimensions = size(area.element).map { "\(Int($0.width))x\(Int($0.height))" } ?? "nil"
+        let origin = point(area.element).map { "\(Int($0.x)),\(Int($0.y))" } ?? "nil"
         let rawURL = value(area.element, kAXURLAttribute)
         let valueType = rawURL.map { String(describing: Swift.type(of: $0)) } ?? "nil"
         print("webArea[\(index)]:")
@@ -132,6 +170,11 @@ private func probe(bundleID: String, label: String) {
         print("  URL:         \(string(rawURL) ?? "nil") (\(valueType))")
         print("  focused:     \(hasFocus)")
         print("  size:        \(dimensions)")
+        print("  position:    \(origin)")
+        print("  AXMain:      \(string(value(area.element, kAXMainAttribute)) ?? "nil")")
+        print("  AXFocused:   \(string(value(area.element, kAXFocusedAttribute)) ?? "nil")")
+        print("  AXVisible:   \(string(value(area.element, "AXVisible")) ?? "nil")")
+        print("  AXSelected:  \(string(value(area.element, kAXSelectedAttribute)) ?? "nil")")
     }
 
     if let first = scan.areas.first {
@@ -142,7 +185,15 @@ private func probe(bundleID: String, label: String) {
     }
 }
 
+let watch = CommandLine.arguments.contains("--watch")
+let iterations = watch ? 24 : 1
 print("AX trusted: \(AXIsProcessTrusted())")
-probe(bundleID: "org.mozilla.firefox", label: "Firefox")
-probe(bundleID: "app.zen-browser.zen", label: "Zen")
-probe(bundleID: "org.chromium.Chromium", label: "Chromium")
+for sample in 0..<iterations {
+    if watch {
+        print("\n--- sample \(sample + 1), \(Date()) ---")
+    }
+    probe(bundleID: "org.mozilla.firefox", label: "Firefox")
+    probe(bundleID: "app.zen-browser.zen", label: "Zen")
+    probe(bundleID: "org.chromium.Chromium", label: "Chromium")
+    if sample + 1 < iterations { Thread.sleep(forTimeInterval: 0.20) }
+}

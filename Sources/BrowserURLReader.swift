@@ -43,6 +43,16 @@ enum BrowserURLReader {
         return state(from: result)
     }
 
+    // Accessibility-backed browsers (Firefox/Gecko and discovered browsers
+    // without AppleScript tab vocabulary) can briefly lack a web area during
+    // launch or tree replacement. TabMemory uses this to add bounded rapid
+    // retries; scriptable browsers retain the ordinary polling path.
+    static func usesAccessibility(for target: BrowserTarget) -> Bool {
+        guard let info = BrowserCatalog.info(forBundleID: target.bundleID) else { return false }
+        if case .accessibility = info.strategy { return true }
+        return false
+    }
+
     // Map a read result to a tab state. `.failed` keeps the prior tab (never reset
     // a real site on a transient glitch); `.blank` (no URL) is a new tab; a value
     // is a real site unless it is a browser's internal new-tab page. Pure, so the
@@ -58,6 +68,16 @@ enum BrowserURLReader {
     // Classify a non-empty URL string a browser returned.
     static func classify(_ urlString: String) -> TabState {
         if isNewTabURL(urlString) { return .newTab }
+        // Browser chrome can itself contain an AXWebArea. Firefox's startup
+        // prompts are a concrete example: the default-browser dialog reports
+        // `chrome://global/content/commonDialog.xhtml` while hiding the page's
+        // web area. URLComponents gives that internal URL a perfectly valid
+        // host (`global`), so accepting every host invents a bogus website and
+        // makes TabMemory stop its readiness/recovery probes. Per-site memory
+        // is meaningful only for network pages; keep all other browser-internal
+        // schemes unreadable until the actual tab is exposed again.
+        guard let scheme = URLComponents(string: urlString)?.scheme?.lowercased(),
+              scheme == "http" || scheme == "https" else { return .unreadable }
         if let host = host(from: urlString) { return .site(host) }
         return .unreadable   // readable but not a site we track → keep prior
     }

@@ -37,10 +37,14 @@ enum InputHintFilter {
     }
 }
 
-// Fires onHint when the observed app changes a window title or its focused
-// window. For browsers the window title is the page title, so a tab switch posts
-// this within milliseconds. Same AXObserver lifecycle as AppFocusObserver
-// (create, addNotification, run-loop source; balanced in stop()/deinit).
+// Fires onHint when the observed app changes a window title, focused window, or
+// focused element. For browsers the window title is the page title, so a tab
+// switch posts this within milliseconds. Focused-element changes also cover a
+// browser-chrome prompt being dismissed inside the same window: Firefox hides
+// the real page web area while such a modal is active, then exposes it without
+// necessarily changing the window or title. Same AXObserver lifecycle as
+// AppFocusObserver (create, addNotification, run-loop source; balanced in
+// stop()/deinit).
 final class TitleChangeHint {
 
     var onHint: (() -> Void)?
@@ -48,10 +52,12 @@ final class TitleChangeHint {
     private let pid: pid_t
     private let appElement: AXUIElement
     private var observer: AXObserver?
+    private var registeredNotifications = Set<String>()
 
     private static let notifications = [
         kAXTitleChangedNotification,
         kAXFocusedWindowChangedNotification,
+        kAXFocusedUIElementChangedNotification,
     ]
 
     init(pid: pid_t) {
@@ -62,28 +68,47 @@ final class TitleChangeHint {
     deinit { stop() }
 
     func start() {
-        guard observer == nil else { return }
-        let callback: AXObserverCallback = { _, _, _, refcon in
-            guard let refcon else { return }
-            let me = Unmanaged<TitleChangeHint>.fromOpaque(refcon).takeUnretainedValue()
-            me.onHint?()
+        if observer == nil {
+            let callback: AXObserverCallback = { _, _, _, refcon in
+                guard let refcon else { return }
+                let me = Unmanaged<TitleChangeHint>.fromOpaque(refcon).takeUnretainedValue()
+                me.onHint?()
+            }
+            var freshObserver: AXObserver?
+            guard AXObserverCreate(pid, callback, &freshObserver) == .success,
+                  let freshObserver else { return }
+            observer = freshObserver
+            CFRunLoopAddSource(CFRunLoopGetMain(),
+                               AXObserverGetRunLoopSource(freshObserver),
+                               .defaultMode)
         }
-        var obs: AXObserver?
-        guard AXObserverCreate(pid, callback, &obs) == .success, let obs else { return }
-        observer = obs
+        guard let observer else { return }
+
+        // Gecko may accept AXObserverCreate before its native accessibility tree
+        // is ready but reject individual notification registrations. The old
+        // code ignored those errors and then treated the non-nil observer as
+        // fully started forever. Leaving and returning to Firefox happened to
+        // destroy/recreate it after readiness, which is why that focus cycle was
+        // required. Keep successful registrations and retry only the missing
+        // ones whenever TabMemory proves the tree is ready.
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        for n in Self.notifications {
-            AXObserverAddNotification(obs, appElement, n as CFString, refcon)
+        for notification in Self.notifications
+            where !registeredNotifications.contains(notification as String) {
+            let error = AXObserverAddNotification(
+                observer, appElement, notification as CFString, refcon)
+            if error == .success || error == .notificationAlreadyRegistered {
+                registeredNotifications.insert(notification as String)
+            }
         }
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
     }
 
     func stop() {
         guard let obs = observer else { return }
-        for n in Self.notifications {
-            AXObserverRemoveNotification(obs, appElement, n as CFString)
+        for notification in registeredNotifications {
+            AXObserverRemoveNotification(obs, appElement, notification as CFString)
         }
         CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
+        registeredNotifications.removeAll()
         observer = nil
     }
 }

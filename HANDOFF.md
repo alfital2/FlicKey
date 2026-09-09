@@ -1,27 +1,24 @@
 ## Status
 
-Firefox support is implemented on `feature/firefox-browser-support` (feature commit `6908437`). A test-quality audit added regression coverage and fixes; all 486 unit tests pass, including 34 browser tests. Signed UI reruns pass the Support suite (3/3) and the previously failing shortcut preset test. The two Firefox live UI tests currently launch without an Accessibility prompt but do not observe the seeded layout switch, so that boundary still needs investigation in a clean VM.
+The user-approved reverted Firefox build-43 source remains the official baseline. The complete Firefox cold-start/tab-awareness fix is committed on `fix/firefox-cold-start-ax` through `d2e89db`, including the readiness, browser-chrome, stale-web-area, and notification-registration lifecycle corrections. The user repeatedly tested Firefox quit/relaunch and per-tab switching and reports that it now works. A Developer-ID-signed local Release build of this source is running as PID 42460 from `/private/tmp/flickey-firefox-dialog-fix.FpFk0p/Build/Products/Release/FlicKey.app`.
 
 ## Recent changes
 
-- Replaced loose SDEF text matching with XML property parsing after a new regression test proved that documentation prose could misclassify a browser as AppleScript-capable.
-- Normalized browser hosts to lowercase and removed a DNS root dot, with a regression test for `WWW.Example.COM.`.
-- Expanded browser discovery coverage for background-only apps and case-insensitive duplicate bundle IDs, including preference for the installed Applications copy.
-- Updated stale Settings UI labels and the Support UI test's intended 30-day trial contract; added a stable accessibility identifier for the state-dependent purchase button.
-- Ran the full unit suite successfully. A signed UI run exposed stale assertions and external LNProbe modal interference; focused reruns confirmed the Support and shortcut Settings fixes.
+- Fixed the remaining focus-cycle dependency at its lifecycle source: Gecko could accept `AXObserverCreate` during cold launch while rejecting individual notification registrations. FlicKey now retains successful registrations and retries only missing ones once the Firefox accessibility tree is proven readable.
+- Clear Firefox's cached AX web-area object on tab-shaped mouse/keyboard input, preventing an old selected-page object from continuing to return a valid but stale URL.
+- Preserved the earlier fixes that reject Firefox chrome dialogs as sites, avoid caching untrackable elements, prefer the outer page over nested iframe areas, and wait for Gecko accessibility readiness.
+- Focused browser tests pass 42/42 and the full unit suite passes 494/494. The running app is 0.5.4 (43); complete nested `codesign --verify --deep --strict --all-architectures` verification passes.
+- Relaunched the corrected app for testing, and the user manually repeated the original cold-start/tab-switch scenario successfully several times.
 
 ## Open questions / blockers
 
-- The Firefox XCUITests run under the Accessibility-authorized Developer ID identity but currently leave the input source on ABC. Determine whether launch timing, browser discovery timing, or the live AX reader is responsible; manual use had worked before this run.
-- Two TextEdit hotkey UI tests lose the TextEdit `TextView` accessibility element after firing the shortcut. Their conversion assertion remains inconclusive and appears to be test-harness instability.
-- LNProbe2 is running from `/Users/tal/Applications/LNProbe2.app` for another session and its local-network permission dialog can intercept UI automation on the host. Do not terminate it without coordinating that work.
-- The VM must grant Accessibility access to its own signed FlicKey build and have Firefox plus ABC and Hebrew-PC input sources enabled for live tests.
+- No Firefox behavior blocker remains from the reported scenario. The current artifact is a local signed test build, not a newly numbered notarized release DMG.
+- Merging into the official development line and producing a distributable artifact should happen only when the user explicitly requests the release step.
 
 ## Next steps
 
-1. In a clean macOS VM, clone the repo, check out `feature/firefox-browser-support`, and grant Accessibility access to the exact FlicKey test-build signing identity.
-2. Reproduce `FirefoxBrowserIntegrationUITests` while collecting FlicKey logs to trace catalog discovery, AX URL reads, and routing callbacks.
-3. Stabilize or replace the stale TextEdit element assertion, then rerun the signed default UI suite.
-4. Rebuild and relaunch the Developer ID Release app after the audit commit is finalized.
+1. Treat `d2e89db` and its prerequisite Firefox commits as the validated implementation to merge into the official development line.
+2. When requested, create a fresh uniquely numbered Developer-ID-signed/notarized artifact and verify the exact mounted DMG before publishing it.
+3. Keep the abandoned arm64 signing experiment separate under `reverted/firefox-build44-arm64-signing-experiment`.
 
-_Last updated: 2026-09-07 by Codex_
+_Last updated: 2026-09-09 by Codex_
