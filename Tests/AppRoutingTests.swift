@@ -41,4 +41,8 @@ final class AppRoutingTests: XCTestCase {
     func testNoRuleLeavesAsIs() {
         XCTAssertEqual(decide(nil, conversation: false), .leaveAsIs)
     }
+
+    func testUndefinedImportedAppLeavesAsIs() {
+        XCTAssertEqual(decide(.undefined, conversation: false), .leaveAsIs)
+    }
 }

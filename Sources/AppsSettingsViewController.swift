@@ -11,11 +11,18 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
     private weak var contentRoot: NSView?
     private var suggestionList: SuggestionListView?
     private var browserCatalogToken: NSObjectProtocol?
+    private var appRulesToken: NSObjectProtocol?
+    private weak var importAllCheckbox: NSButton?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         browserCatalogToken = NotificationCenter.default.addObserver(
             forName: .browserCatalogChanged, object: nil, queue: .main) { [weak self] _ in
+                self?.buildRows()
+            }
+        appRulesToken = NotificationCenter.default.addObserver(
+            forName: .appRulesChanged, object: nil, queue: .main) { [weak self] _ in
+                self?.syncImportCheckbox()
                 self?.buildRows()
             }
     }
@@ -27,15 +34,24 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
 
     deinit {
         if let browserCatalogToken { NotificationCenter.default.removeObserver(browserCatalogToken) }
+        if let appRulesToken { NotificationCenter.default.removeObserver(appRulesToken) }
     }
 
     override func loadView() {
         let title = NSTextField(labelWithString: "Preferred Input per App")
         title.font = .systemFont(ofSize: 15, weight: .semibold)
 
-        let subtitle = NSTextField(labelWithString: "Type an app name to add it, or tap + to browse.")
+        let subtitle = NSTextField(labelWithString:
+            "Add only the apps you care about, or import all installed apps.")
         subtitle.font = .systemFont(ofSize: 12)
         subtitle.textColor = .secondaryLabelColor
+
+        let importAll = NSButton(
+            checkboxWithTitle: "Import all my apps",
+            target: self,
+            action: #selector(importAllChanged(_:)))
+        importAll.state = AppRules.importsAllApps ? .on : .off
+        importAllCheckbox = importAll
 
         let search = NSTextField()
         search.placeholderString = "Add app by name…"
@@ -77,7 +93,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
 
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        for v in [title, subtitle, addBar, scroll] {
+        for v in [title, subtitle, importAll, addBar, scroll] {
             v.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(v)
         }
@@ -91,7 +107,10 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
             subtitle.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 2),
             subtitle.leadingAnchor.constraint(equalTo: title.leadingAnchor),
 
-            addBar.topAnchor.constraint(equalTo: subtitle.bottomAnchor, constant: 12),
+            importAll.topAnchor.constraint(equalTo: subtitle.bottomAnchor, constant: 10),
+            importAll.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+
+            addBar.topAnchor.constraint(equalTo: importAll.bottomAnchor, constant: 10),
             addBar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
             addBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
 
@@ -126,9 +145,10 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
         }
 
         let footnote = NSTextField(wrappingLabelWithString:
-            "AUTO learns and remembers the input language automatically - per website "
+            "Not defined leaves the current input language unchanged. AUTO learns and "
+            + "remembers automatically - per website "
             + "for browsers, per conversation for chat apps. Pick a language instead to "
-            + "force it. Apps not listed keep whatever input was last active.")
+            + "force it when moving between apps.")
         footnote.font = .systemFont(ofSize: 11)
         footnote.textColor = .secondaryLabelColor
         listStack.addArrangedSubview(spacer(12))
@@ -137,6 +157,14 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
             equalTo: listStack.widthAnchor,
             constant: -listStack.edgeInsets.left - listStack.edgeInsets.right
         ).isActive = true
+    }
+
+    private func syncImportCheckbox() {
+        importAllCheckbox?.state = AppRules.importsAllApps ? .on : .off
+    }
+
+    @objc private func importAllChanged(_ sender: NSButton) {
+        AppRules.setImportsAllApps(sender.state == .on)
     }
 
     private func addRow(for app: AppRule) {
@@ -327,7 +355,8 @@ private final class RuleRowView: NSView {
             popup.addItem(withTitle: "Auto (per-conversation)")
             itemRules.append(.auto)
         case .normal:
-            break
+            popup.insertItem(withTitle: "Not defined", at: 0)
+            itemRules.insert(.undefined, at: 0)
         }
         // The stored rule can reference an input source the user has since disabled,
         // so it may not be among the enabled sources listed above. Show it explicitly
@@ -367,6 +396,8 @@ private final class RuleRowView: NSView {
         switch rule {
         case .auto:
             return "Auto"
+        case .undefined:
+            return "Not defined"
         case .source(let id):
             let name = InputSourceCatalog.localizedName(for: id) ?? id
             return "\(name) (not enabled)"

@@ -223,6 +223,7 @@ final class BrowserCatalogObserver {
             workspaceTokens.append(workspace.addObserver(
                 forName: name, object: nil, queue: .main) { _ in
                     BrowserCatalog.invalidate()
+                    AppFinder.invalidateInstalledApps()
                     NotificationCenter.default.post(name: .browserCatalogChanged, object: nil)
                 })
         }

@@ -13,6 +13,11 @@ final class InputRuleTests: XCTestCase {
         XCTAssertEqual(InputRule(storage: "__auto__"), .auto)
     }
 
+    func testUndefinedRoundTrip() {
+        XCTAssertEqual(InputRule.undefined.storageValue, "__undefined__")
+        XCTAssertEqual(InputRule(storage: "__undefined__"), .undefined)
+    }
+
     func testEmptyStorageIsNil() {
         XCTAssertNil(InputRule(storage: ""))
     }
@@ -20,8 +25,11 @@ final class InputRuleTests: XCTestCase {
     func testAccessors() {
         XCTAssertEqual(InputRule.source("x").sourceID, "x")
         XCTAssertNil(InputRule.auto.sourceID)
+        XCTAssertNil(InputRule.undefined.sourceID)
         XCTAssertTrue(InputRule.auto.isAuto)
         XCTAssertFalse(InputRule.source("x").isAuto)
+        XCTAssertTrue(InputRule.undefined.isUndefined)
+        XCTAssertFalse(InputRule.source("x").isUndefined)
     }
 
     func testFallbackSymbol() {
