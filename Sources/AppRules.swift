@@ -48,6 +48,10 @@ struct AppRule {
 
     var isBrowser: Bool { kind == .browser }
     var isConversationApp: Bool { kind == .conversation }
+    // Only ordinary app rows learn one app-wide preference. Browsers and chat
+    // apps own finer-grained memory (per site / per conversation), so learning
+    // them here would accidentally flatten those behaviors into one rule.
+    var learnsAppPreference: Bool { kind == .normal }
     var matchKey: String { name.lowercased() }
 }
 
@@ -212,25 +216,35 @@ enum AppRules {
 
     // Effective rule for an already-normalized (lowercased) app name.
     static func rule(forNormalizedName name: String) -> InputRule? {
-        all.first { $0.matchKey == name }?.rule
+        appRule(forBundleID: nil, normalizedName: name)?.rule
     }
 
     // Prefer stable bundle identity for a running app. Name fallback preserves
     // custom/built-in behavior when an old or unusual app has no bundle ID.
     static func rule(for app: NSRunningApplication) -> InputRule? {
-        rule(forBundleID: app.bundleIdentifier,
-             normalizedName: normalizedName(app.localizedName))
+        appRule(for: app)?.rule
     }
 
     static func rule(forBundleID bundleID: String?, normalizedName name: String) -> InputRule? {
+        appRule(forBundleID: bundleID, normalizedName: name)?.rule
+    }
+
+    // Full matched row for callers that need its identity/kind in addition to
+    // the effective input rule (notably AppWatcher when learning a preference).
+    static func appRule(for app: NSRunningApplication) -> AppRule? {
+        appRule(forBundleID: app.bundleIdentifier,
+                normalizedName: normalizedName(app.localizedName))
+    }
+
+    static func appRule(forBundleID bundleID: String?, normalizedName name: String) -> AppRule? {
         let rules = all
         if let bundleID,
            let match = rules.first(where: {
                $0.bundleID.caseInsensitiveCompare(bundleID) == .orderedSame
            }) {
-            return match.rule
+            return match
         }
-        return name.isEmpty ? nil : rules.first { $0.matchKey == name }?.rule
+        return name.isEmpty ? nil : rules.first { $0.matchKey == name }
     }
 
     // App names can carry zero-width / bidi format characters; strip them and
@@ -269,6 +283,15 @@ enum AppRules {
             RulesStore.set(rule.storageValue, forMatchKey: app.matchKey)
         }
         NotificationCenter.default.post(name: .appRulesChanged, object: nil)
+    }
+
+    // Called for a real user input-source change while an ordinary app is
+    // active. The first change turns an imported `Not defined` row into a
+    // persistent app preference; subsequent changes replace that preference.
+    // Duplicate notifications (including our own forced switch) are ignored.
+    static func rememberSource(_ sourceID: String, for app: AppRule) {
+        guard app.learnsAppPreference, app.rule.sourceID != sourceID else { return }
+        setRule(.source(sourceID), for: app)
     }
 
     static var importsAllApps: Bool { RulesStore.importAllAppsEnabled() }

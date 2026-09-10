@@ -145,7 +145,8 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
         }
 
         let footnote = NSTextField(wrappingLabelWithString:
-            "Not defined leaves the current input language unchanged. AUTO learns and "
+            "For ordinary apps, changing the input language makes it their preferred language. "
+            + "Not defined leaves it unchanged until then. AUTO learns and "
             + "remembers automatically - per website "
             + "for browsers, per conversation for chat apps. Pick a language instead to "
             + "force it when moving between apps.")

@@ -99,6 +99,47 @@ final class AppRulesTests: XCTestCase {
                        .source("test.layout"))
     }
 
+    func testChangingSourceLearnsAndPersistsImportedOrdinaryApp() {
+        AppRules.setInstalledAppsProviderForTesting {
+            [CustomApp(name: "Example Editor", bundleID: "com.test.editor")]
+        }
+        AppRules.setImportsAllApps(true)
+        guard let imported = AppRules.appRule(forBundleID: "com.test.editor",
+                                              normalizedName: "renamed") else {
+            return XCTFail("imported app missing")
+        }
+
+        XCTAssertTrue(imported.learnsAppPreference)
+        XCTAssertEqual(imported.rule, .undefined)
+        AppRules.rememberSource("test.first-layout", for: imported)
+
+        XCTAssertTrue(RulesStore.customApps().contains { $0.bundleID == "com.test.editor" })
+        XCTAssertEqual(AppRules.rule(forBundleID: "com.test.editor", normalizedName: "renamed"),
+                       .source("test.first-layout"))
+
+        AppRules.setImportsAllApps(false)
+        guard let persisted = AppRules.appRule(forBundleID: "com.test.editor",
+                                               normalizedName: "renamed") else {
+            return XCTFail("learned app did not persist")
+        }
+        AppRules.rememberSource("test.second-layout", for: persisted)
+        XCTAssertEqual(AppRules.rule(forBundleID: "com.test.editor", normalizedName: "renamed"),
+                       .source("test.second-layout"))
+    }
+
+    func testAppWideLearningNeverOverridesBrowserOrConversationMemory() {
+        let browser = AppRule(name: "Browser", bundleID: "com.test.browser", rule: .auto,
+                              isCustom: false, isImported: false, kind: .browser)
+        let conversation = AppRule(name: "Chat", bundleID: "com.test.chat", rule: .auto,
+                                   isCustom: false, isImported: false, kind: .conversation)
+
+        AppRules.rememberSource("test.layout", for: browser)
+        AppRules.rememberSource("test.layout", for: conversation)
+
+        XCTAssertNil(RulesStore.overrides()[browser.matchKey])
+        XCTAssertNil(RulesStore.overrides()[conversation.matchKey])
+    }
+
     func testExistingExplicitRuleMigratesWithoutRestoringUntouchedDefaults() {
         AppRules.setInstalledAppsProviderForTesting {
             [

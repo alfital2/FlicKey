@@ -5,6 +5,16 @@ import AppKit
 // not forced here — they're handed to TabMemory (Phase 5) for per-tab memory.
 final class AppWatcher {
 
+    private struct LearningTarget {
+        let app: AppRule
+        let pid: pid_t
+    }
+
+    private struct IgnoredProgrammaticChange {
+        let sourceID: String
+        let expiresAt: TimeInterval
+    }
+
     // Injected in Phase 5 to hand browser activations to TabMemory.
     var onBrowserActivated: ((NSRunningApplication) -> Void)?
     // Called when a non-browser (or EN/HE-forced) app becomes active, so
@@ -15,8 +25,30 @@ final class AppWatcher {
     var onConversationApp: ((NSRunningApplication) -> Void)?
 
     private var observer: NSObjectProtocol?
+    private let inputMonitor = InputSourceMonitor()
+    private var learningTarget: LearningTarget?
+    // A layout forced by this watcher also emits the same system notification
+    // as a human switch. Consume that notification so a rapid activation of a
+    // different, undefined app cannot learn our delayed programmatic switch.
+    private var programmaticChangeToIgnore: IgnoredProgrammaticChange?
 
     func start() {
+        inputMonitor.onChange = { [weak self] in
+            // Capture both halves of the event before hopping to the main queue.
+            // Otherwise an app activation between notification delivery and the
+            // queued callback could attribute the old app's change to the new one.
+            let sourceID = InputSourceManager.currentSourceID()
+            let frontmost = NSWorkspace.shared.frontmostApplication
+            let pid = frontmost?.processIdentifier
+            let bundleID = frontmost?.bundleIdentifier
+            DispatchQueue.main.async {
+                self?.inputSourceChanged(sourceID: sourceID,
+                                         frontmostPID: pid,
+                                         frontmostBundleID: bundleID)
+            }
+        }
+        inputMonitor.start()
+
         let nc = NSWorkspace.shared.notificationCenter
         observer = nc.addObserver(
             forName: NSWorkspace.didActivateApplicationNotification,
@@ -50,8 +82,18 @@ final class AppWatcher {
         // count as "left the browser" and clear the current site.
         if app.bundleIdentifier == Bundle.main.bundleIdentifier { return }
 
-        let rule = AppRules.rule(for: app)
+        let matchedApp = AppRules.appRule(for: app)
+        let rule = matchedApp?.rule
         let isConversationApp = ConversationProviderRegistry.provider(forBundleID: app.bundleIdentifier) != nil
+
+        // An ordinary app participates only when it is present in AppRules
+        // (manually added, imported, or retained after learning). Browser/chat
+        // rows must never be learned app-wide.
+        if let matchedApp, matchedApp.learnsAppPreference {
+            learningTarget = LearningTarget(app: matchedApp, pid: app.processIdentifier)
+        } else {
+            learningTarget = nil
+        }
 
         let decision = AppRouting.decide(rule: rule, isConversationApp: isConversationApp)
         let bundleID = app.bundleIdentifier ?? "?"
@@ -62,6 +104,11 @@ final class AppWatcher {
         case .force(let id):
             Diag.log(.layoutSwitch(expected: id, applied: id))
             onLeftBrowser?()                 // releases both auto-controllers
+            if InputSourceManager.currentSourceID() != id {
+                programmaticChangeToIgnore = IgnoredProgrammaticChange(
+                    sourceID: id,
+                    expiresAt: ProcessInfo.processInfo.systemUptime + 1.0)
+            }
             InputSourceManager.switchTo(sourceID: id)
             SwitchStats.record(.appSwitch)
         case .conversation:
@@ -71,6 +118,29 @@ final class AppWatcher {
         case .leaveAsIs:
             onLeftBrowser?()                 // no rule → leave the input source as-is
         }
+    }
+
+    private func inputSourceChanged(sourceID: String?,
+                                    frontmostPID: pid_t?,
+                                    frontmostBundleID: String?) {
+        guard let sourceID else { return }
+
+        if let ignored = programmaticChangeToIgnore,
+           ignored.sourceID == sourceID,
+           ProcessInfo.processInfo.systemUptime <= ignored.expiresAt {
+            programmaticChangeToIgnore = nil
+            return
+        }
+        // A stale ignore token must not swallow a later genuine user change to
+        // another source.
+        programmaticChangeToIgnore = nil
+
+        guard let target = learningTarget,
+              frontmostPID == target.pid,
+              frontmostBundleID?.caseInsensitiveCompare(target.app.bundleID) == .orderedSame
+        else { return }
+
+        AppRules.rememberSource(sourceID, for: target.app)
     }
 }
 

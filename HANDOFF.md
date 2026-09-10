@@ -1,32 +1,23 @@
 ## Status
 
-The opt-in imported-app rules feature is merged into `dev` at `f0c5349`, alongside the validated Firefox support. No ordinary apps are hardcoded: users can import installed apps as `Not defined`, and only an explicit language choice enables per-app enforcement. Existing explicit rules migrate while untouched legacy defaults disappear. Debug QA builds unlock automatically, but Release builds retain real licensing. A signed universal Release build 51 from merged `dev` is currently running locally.
+`dev` is the official development line. It contains Firefox and other discovered-browser per-site memory, no hardcoded ordinary-app catalog, an opt-in “Import all my apps” control, and immediate per-app preference learning for imported/manually added ordinary apps. The recent auto-fix monitor-health experiment has been reverted.
 
 ## Recent changes
 
-- Removed the hardcoded ordinary-app catalog and its implicit English/Hebrew defaults.
-- Added `Import all my apps`; while enabled, standard installed apps are discovered and shown without receiving a rule.
-- Added the `Not defined` rule state, which routes to `leaveAsIs` and never changes the active input source.
-- Persist an imported app's identity only after the user explicitly chooses a source, so that rule remains active even if import-all is later disabled.
-- Added upgrade migration for explicit legacy rules whose app identity was previously supplied only by the hardcoded catalog; untouched hardcoded defaults are deliberately not restored.
-- Kept discovered browsers on `Auto (per-site)` and conversation providers on `Auto (per-conversation)`, preserving the validated Firefox implementation from `dev`.
-- Added coverage for import toggling, undefined routing, explicit-rule persistence, settings persistence, and legacy-rule migration. Full unit suite passes 500/500.
-- Made normal Debug QA builds resolve as licensed without a key, while preserving the real isolated trial path for UI tests and all explicit entitlement simulation flags. Release builds do not compile this bypass.
-- Labeled Debug settings as `QA TEST BUILD — Unlocked` so testers can identify the artifact directly.
-- Built arm64 Debug QA build 51. Its exact mounted DMG passes `hdiutil verify` and strict nested signature verification.
-- Merged `feature/import-all-apps` into `dev` after all 500 unit tests passed.
-- Built a universal Release configuration from merged `dev`, verified it contains no QA-unlock marker, verified its complete nested signature, and launched it with no arguments from `dist/dev-release-b51/FlicKey-0.5.4-build51-dev-release-universal.app`.
+- Reverted the two auto-fix monitor-health commits because the requested dev scope is browser memory plus the redesigned app rules.
+- Made an input-source change in an active listed ordinary app immediately become that app’s persisted preferred source, including while the Apps settings pane is already open.
+- Captured app identity at notification time and suppressed FlicKey-generated layout notifications, preventing rapid app switches from learning a stale/programmatic source.
+- Kept browsers and conversation apps out of app-wide learning so their per-site/per-conversation memory remains authoritative.
+- Bumped the local dev build to 0.5.4 (54); the full 502-test unit suite passes.
 
 ## Open questions / blockers
 
-- The merged build needs the user's final visual/behavioral approval, especially the checkbox wording and upgrade behavior.
-- The build-51 DMG is Apple-Development signed for arm64 QA and intentionally not a notarized release artifact.
+- The local Apple Development signature has valid code structure but its certificate chain reports `CSSMERR_TP_NOT_TRUSTED` on strict verification. Build 54 is intended for local host testing, not distribution.
 
 ## Next steps
 
-1. Validate the Apps pane in the running Release build: checkbox off/on, `Not defined`, explicit switching, and off again.
-2. Confirm on a clean QA Mac that the separate Debug build 51 opens unlocked without arguments or a license key.
-3. Confirm an existing explicitly configured app remains listed and enforced after update.
-4. Promote from `dev` only after final approval.
+1. Manually verify: enable “Import all my apps,” focus an ordinary app showing “Not defined,” change the input source, and confirm its open settings row updates immediately.
+2. Switch away and back to confirm the learned language is restored; separately smoke-test Firefox tab/site memory.
+3. If approved, prepare a Developer ID signed/notarized distributable from `dev` with a new build number.
 
-_Last updated: 2026-09-10 by Codex_
+_Last updated: 2026-09-11 by Codex_
