@@ -2,7 +2,8 @@ import XCTest
 
 final class AppRulesTests: XCTestCase {
 
-    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins", "importAllApps"]
+    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins", "importAllApps",
+                        "rememberVisitedApps"]
     override func setUp() {
         keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
         BrowserCatalog.resetApplicationURLsProviderForTesting()
@@ -138,6 +139,64 @@ final class AppRulesTests: XCTestCase {
 
         XCTAssertNil(RulesStore.overrides()[browser.matchKey])
         XCTAssertNil(RulesStore.overrides()[conversation.matchKey])
+    }
+
+    func testVisitDoesNotAddAnUnlistedAppWhenAutomaticRememberingIsOff() {
+        let app = AppRules.appRuleForVisit(bundleID: "com.test.visited",
+                                           name: "Visited App",
+                                           sourceID: "test.layout")
+        XCTAssertNil(app)
+        XCTAssertTrue(RulesStore.customApps().isEmpty)
+    }
+
+    func testVisitAddsOrdinaryAppWithCurrentSourceWhenAutomaticRememberingIsOn() {
+        AppRules.setRemembersVisitedApps(true)
+
+        let app = AppRules.appRuleForVisit(bundleID: "com.test.visited",
+                                           name: "Visited App",
+                                           sourceID: "test.initial-layout")
+
+        XCTAssertEqual(app?.rule, .source("test.initial-layout"))
+        XCTAssertTrue(app?.learnsAppPreference == true)
+        XCTAssertTrue(RulesStore.customApps().contains { $0.bundleID == "com.test.visited" })
+    }
+
+    func testAutomaticVisitInitializesImportedUndefinedApp() {
+        AppRules.setInstalledAppsProviderForTesting {
+            [CustomApp(name: "Imported App", bundleID: "com.test.imported")]
+        }
+        AppRules.setImportsAllApps(true)
+        AppRules.setRemembersVisitedApps(true)
+
+        let app = AppRules.appRuleForVisit(bundleID: "com.test.imported",
+                                           name: "Imported App",
+                                           sourceID: "test.current-layout")
+
+        XCTAssertEqual(app?.rule, .source("test.current-layout"))
+        XCTAssertTrue(RulesStore.customApps().contains { $0.bundleID == "com.test.imported" })
+    }
+
+    func testReturningToKnownAppKeepsSavedPreferenceInsteadOfCurrentSource() {
+        AppRules.setRemembersVisitedApps(true)
+        _ = AppRules.appRuleForVisit(bundleID: "com.test.visited",
+                                     name: "Visited App",
+                                     sourceID: "test.saved-layout")
+
+        let returning = AppRules.appRuleForVisit(bundleID: "com.test.visited",
+                                                 name: "Visited App",
+                                                 sourceID: "test.other-current-layout")
+
+        XCTAssertEqual(returning?.rule, .source("test.saved-layout"))
+    }
+
+    func testAutomaticVisitNeverAddsConversationProviderAsOrdinaryApp() {
+        AppRules.setRemembersVisitedApps(true)
+
+        _ = AppRules.appRuleForVisit(bundleID: "com.microsoft.teams2",
+                                     name: "Microsoft Teams",
+                                     sourceID: "test.layout")
+
+        XCTAssertFalse(RulesStore.customApps().contains { $0.bundleID == "com.microsoft.teams2" })
     }
 
     func testExistingExplicitRuleMigratesWithoutRestoringUntouchedDefaults() {

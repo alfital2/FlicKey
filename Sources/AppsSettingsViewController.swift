@@ -13,6 +13,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
     private var browserCatalogToken: NSObjectProtocol?
     private var appRulesToken: NSObjectProtocol?
     private weak var importAllCheckbox: NSButton?
+    private weak var rememberVisitedCheckbox: NSButton?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -22,7 +23,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
             }
         appRulesToken = NotificationCenter.default.addObserver(
             forName: .appRulesChanged, object: nil, queue: .main) { [weak self] _ in
-                self?.syncImportCheckbox()
+                self?.syncCheckboxes()
                 self?.buildRows()
             }
     }
@@ -42,7 +43,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
         title.font = .systemFont(ofSize: 15, weight: .semibold)
 
         let subtitle = NSTextField(labelWithString:
-            "Add only the apps you care about, or import all installed apps.")
+            "Choose apps manually, import them all, or remember them as you use them.")
         subtitle.font = .systemFont(ofSize: 12)
         subtitle.textColor = .secondaryLabelColor
 
@@ -52,6 +53,13 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
             action: #selector(importAllChanged(_:)))
         importAll.state = AppRules.importsAllApps ? .on : .off
         importAllCheckbox = importAll
+
+        let rememberVisited = NSButton(
+            checkboxWithTitle: "Remember language for apps I use",
+            target: self,
+            action: #selector(rememberVisitedChanged(_:)))
+        rememberVisited.state = AppRules.remembersVisitedApps ? .on : .off
+        rememberVisitedCheckbox = rememberVisited
 
         let search = NSTextField()
         search.placeholderString = "Add app by name…"
@@ -93,7 +101,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
 
         let container = NSView()
         container.translatesAutoresizingMaskIntoConstraints = false
-        for v in [title, subtitle, importAll, addBar, scroll] {
+        for v in [title, subtitle, importAll, rememberVisited, addBar, scroll] {
             v.translatesAutoresizingMaskIntoConstraints = false
             container.addSubview(v)
         }
@@ -110,7 +118,10 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
             importAll.topAnchor.constraint(equalTo: subtitle.bottomAnchor, constant: 10),
             importAll.leadingAnchor.constraint(equalTo: title.leadingAnchor),
 
-            addBar.topAnchor.constraint(equalTo: importAll.bottomAnchor, constant: 10),
+            rememberVisited.topAnchor.constraint(equalTo: importAll.bottomAnchor, constant: 4),
+            rememberVisited.leadingAnchor.constraint(equalTo: title.leadingAnchor),
+
+            addBar.topAnchor.constraint(equalTo: rememberVisited.bottomAnchor, constant: 10),
             addBar.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 16),
             addBar.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16),
 
@@ -160,12 +171,17 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
         ).isActive = true
     }
 
-    private func syncImportCheckbox() {
+    private func syncCheckboxes() {
         importAllCheckbox?.state = AppRules.importsAllApps ? .on : .off
+        rememberVisitedCheckbox?.state = AppRules.remembersVisitedApps ? .on : .off
     }
 
     @objc private func importAllChanged(_ sender: NSButton) {
         AppRules.setImportsAllApps(sender.state == .on)
+    }
+
+    @objc private func rememberVisitedChanged(_ sender: NSButton) {
+        AppRules.setRemembersVisitedApps(sender.state == .on)
     }
 
     private func addRow(for app: AppRule) {

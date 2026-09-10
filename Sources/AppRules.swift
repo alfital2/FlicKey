@@ -63,9 +63,10 @@ struct CustomApp: Codable {
 
 // Single source of truth for per-app input rules, shared by AppWatcher (to act)
 // and the preferences window (to display + edit). Ordinary apps are never
-// hardcoded: they are added explicitly or discovered when the user enables
-// "Import all my apps". Discovered ordinary apps default to .undefined, which
-// deliberately leaves the current input source untouched.
+// hardcoded: they are added explicitly, discovered when the user enables
+// "Import all my apps", or learned as the user visits them when that opt-in is
+// enabled. Imported ordinary apps default to .undefined, which deliberately
+// leaves the current input source untouched.
 enum AppRules {
 
     private static var installedAppsProvider: () -> [CustomApp] = AppFinder.installedApps
@@ -294,10 +295,50 @@ enum AppRules {
         setRule(.source(sourceID), for: app)
     }
 
+    // Resolves the row AppWatcher should use for an activation. With automatic
+    // remembering off, this is a read-only lookup. With it on, a previously
+    // unseen ordinary app is persisted with the input source active on first
+    // visit; an imported undefined row receives the same initial preference.
+    // Browsers and conversation apps always retain their finer-grained memory.
+    static func appRuleForVisit(bundleID: String?, name: String?, sourceID: String?) -> AppRule? {
+        let normalized = normalizedName(name)
+        let existing = appRule(forBundleID: bundleID, normalizedName: normalized)
+        guard remembersVisitedApps, let sourceID else { return existing }
+
+        if let existing {
+            guard existing.learnsAppPreference else { return existing }
+            // A saved preference must win on return to the app. Only initialize
+            // a row that has never learned anything; later user changes arrive
+            // through AppWatcher's input-source notification.
+            if existing.rule.isUndefined {
+                rememberSource(sourceID, for: existing)
+            }
+            return appRule(forBundleID: bundleID, normalizedName: normalized)
+        }
+
+        guard let bundleID, !bundleID.isEmpty, !normalized.isEmpty,
+              bundleID != Bundle.main.bundleIdentifier,
+              BrowserCatalog.info(forBundleID: bundleID) == nil,
+              ConversationProviderRegistry.provider(forBundleID: bundleID) == nil
+        else { return nil }
+
+        let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? normalized
+        RulesStore.addCustomApp(CustomApp(name: displayName, bundleID: bundleID))
+        RulesStore.set(InputRule.source(sourceID).storageValue, forMatchKey: normalized)
+        NotificationCenter.default.post(name: .appRulesChanged, object: nil)
+        return appRule(forBundleID: bundleID, normalizedName: normalized)
+    }
+
     static var importsAllApps: Bool { RulesStore.importAllAppsEnabled() }
+    static var remembersVisitedApps: Bool { RulesStore.rememberVisitedAppsEnabled() }
 
     static func setImportsAllApps(_ enabled: Bool) {
         RulesStore.setImportAllAppsEnabled(enabled)
+        NotificationCenter.default.post(name: .appRulesChanged, object: nil)
+    }
+
+    static func setRemembersVisitedApps(_ enabled: Bool) {
+        RulesStore.setRememberVisitedAppsEnabled(enabled)
         NotificationCenter.default.post(name: .appRulesChanged, object: nil)
     }
 
@@ -374,6 +415,7 @@ enum RulesStore {
     private static let customKey = "customApps"
     private static let hiddenKey = "hiddenBuiltins"
     private static let importAllKey = "importAllApps"
+    private static let rememberVisitedKey = "rememberVisitedApps"
 
     // Raw override strings keyed by app matchKey (an input source ID or the
     // AUTO token); interpreted by AppRules.
@@ -393,6 +435,14 @@ enum RulesStore {
 
     static func setImportAllAppsEnabled(_ enabled: Bool) {
         AppDefaults.store.set(enabled, forKey: importAllKey)
+    }
+
+    static func rememberVisitedAppsEnabled() -> Bool {
+        AppDefaults.store.bool(forKey: rememberVisitedKey)
+    }
+
+    static func setRememberVisitedAppsEnabled(_ enabled: Bool) {
+        AppDefaults.store.set(enabled, forKey: rememberVisitedKey)
     }
 
     static func customApps() -> [CustomApp] {

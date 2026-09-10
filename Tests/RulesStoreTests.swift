@@ -2,7 +2,8 @@ import XCTest
 
 final class RulesStoreTests: XCTestCase {
 
-    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins", "importAllApps"]
+    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins", "importAllApps",
+                        "rememberVisitedApps"]
     override func setUp() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
     override func tearDown() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
 
@@ -43,5 +44,13 @@ final class RulesStoreTests: XCTestCase {
         XCTAssertTrue(RulesStore.importAllAppsEnabled())
         RulesStore.setImportAllAppsEnabled(false)
         XCTAssertFalse(RulesStore.importAllAppsEnabled())
+    }
+
+    func testRememberVisitedAppsSettingRoundTrips() {
+        XCTAssertFalse(RulesStore.rememberVisitedAppsEnabled())
+        RulesStore.setRememberVisitedAppsEnabled(true)
+        XCTAssertTrue(RulesStore.rememberVisitedAppsEnabled())
+        RulesStore.setRememberVisitedAppsEnabled(false)
+        XCTAssertFalse(RulesStore.rememberVisitedAppsEnabled())
     }
 }
