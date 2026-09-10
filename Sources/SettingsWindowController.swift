@@ -173,7 +173,7 @@ final class GeneralSettingsViewController: NSViewController {
         checkNow.bezelStyle = .rounded
 
         #if DEBUG
-        let versionLabel = "FlicKey \(appShortVersion) Firefox (QA TEST BUILD)"
+        let versionLabel = "FlicKey \(appShortVersion) Firefox (QA TEST BUILD — Unlocked)"
         #else
         let versionLabel = "FlicKey \(appShortVersion) Firefox"
         #endif

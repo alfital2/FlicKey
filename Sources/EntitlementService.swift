@@ -7,6 +7,11 @@ extension Entitlement {
     static func current(now: Int = Int(Date().timeIntervalSince1970)) -> Entitlement {
         #if DEBUG
         if let override = debugOverride { return override }
+        // Debug artifacts are distributed only for QA. They must work on a
+        // clean test Mac without a purchase key; otherwise testers cannot reach
+        // the features the artifact exists to validate. UI tests deliberately
+        // retain the real entitlement path below so trial coverage stays real.
+        if !UITestMode.isActive { return .licensed }
         #endif
         return decide(trial: TrialManager.load(), now: now, isLicensed: LicenseStore.isLicensed)
     }
