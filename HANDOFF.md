@@ -1,25 +1,26 @@
 ## Status
 
-The user-approved reverted Firefox build-43 source plus the complete Firefox cold-start/tab-awareness fix is now merged into `dev` at `ee5975b`. This includes the readiness, browser-chrome, stale-web-area, and notification-registration lifecycle corrections. The user repeatedly tested Firefox quit/relaunch and per-tab switching and reports that it now works. A Developer-ID-signed local Release build of this source is running as PID 42460 from `/private/tmp/flickey-firefox-dialog-fix.FpFk0p/Build/Products/Release/FlicKey.app`.
+`feature/import-all-apps` is based directly on the validated Firefox `dev` branch. It replaces the abandoned automatic-learning experiment with an explicit import model: no ordinary apps are hardcoded, an optional checkbox lists installed ordinary apps as `Not defined`, and only an explicit language choice enables per-app enforcement. Firefox/Safari per-site and supported chat per-conversation behavior remain unchanged. Local QA build 49 is running with Settings open.
 
 ## Recent changes
 
-- Fixed the remaining focus-cycle dependency at its lifecycle source: Gecko could accept `AXObserverCreate` during cold launch while rejecting individual notification registrations. FlicKey now retains successful registrations and retries only missing ones once the Firefox accessibility tree is proven readable.
-- Clear Firefox's cached AX web-area object on tab-shaped mouse/keyboard input, preventing an old selected-page object from continuing to return a valid but stale URL.
-- Preserved the earlier fixes that reject Firefox chrome dialogs as sites, avoid caching untrackable elements, prefer the outer page over nested iframe areas, and wait for Gecko accessibility readiness.
-- Focused browser tests pass 42/42 and the full unit suite passes 494/494. The running app is 0.5.4 (43); complete nested `codesign --verify --deep --strict --all-architectures` verification passes.
-- Relaunched the corrected app for testing, and the user manually repeated the original cold-start/tab-switch scenario successfully several times.
-- Merged the complete validated branch into `dev`; the merge tree is identical to the tested feature tree. Post-merge focused browser tests pass 42/42 and the full unit suite passes 494/494.
+- Removed the hardcoded ordinary-app catalog and its implicit English/Hebrew defaults.
+- Added `Import all my apps`; while enabled, standard installed apps are discovered and shown without receiving a rule.
+- Added the `Not defined` rule state, which routes to `leaveAsIs` and never changes the active input source.
+- Persist an imported app's identity only after the user explicitly chooses a source, so that rule remains active even if import-all is later disabled.
+- Kept discovered browsers on `Auto (per-site)` and conversation providers on `Auto (per-conversation)`, preserving the validated Firefox implementation from `dev`.
+- Added coverage for import toggling, undefined routing, explicit-rule persistence, and settings persistence. Full unit suite passes 499/499.
+- Built and relaunched arm64 Debug QA build 49 from `/private/tmp/flickey-import-all-b49.g2a7jd/Build/Products/Debug/FlicKey.app`.
 
 ## Open questions / blockers
 
-- No Firefox behavior blocker remains from the reported scenario. The current artifact is a local signed test build, not a newly numbered notarized release DMG.
-- Producing a distributable artifact should happen only when the user explicitly requests the release step.
+- Build 49 needs the user's visual/behavioral approval, especially the checkbox wording and whether configured apps should remain listed after import-all is turned off.
+- No build-49 DMG has been requested or packaged.
 
 ## Next steps
 
-1. Begin the next requested feature from the validated `dev` state at `ee5975b`.
-2. When requested, create a fresh uniquely numbered Developer-ID-signed/notarized artifact and verify the exact mounted DMG before publishing it.
-3. Keep the abandoned arm64 signing experiment separate under `reverted/firefox-build44-arm64-signing-experiment`.
+1. Validate the Apps pane: checkbox off, checkbox on, `Not defined`, explicit language switching, and checkbox off again.
+2. Adjust the interaction if requested, then package a fresh QA artifact only when needed.
+3. Merge to `dev` after approval.
 
-_Last updated: 2026-09-09 by Codex_
+_Last updated: 2026-09-10 by Codex_

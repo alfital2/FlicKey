@@ -2,7 +2,7 @@ import XCTest
 
 final class RulesStoreTests: XCTestCase {
 
-    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins"]
+    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins", "importAllApps"]
     override func setUp() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
     override func tearDown() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
 
@@ -35,5 +35,13 @@ final class RulesStoreTests: XCTestCase {
         RulesStore.set("x", forMatchKey: "safari")
         RulesStore.hideBuiltin(matchKey: "safari")
         XCTAssertNil(RulesStore.overrides()["safari"])
+    }
+
+    func testImportAllAppsSettingRoundTrips() {
+        XCTAssertFalse(RulesStore.importAllAppsEnabled())
+        RulesStore.setImportAllAppsEnabled(true)
+        XCTAssertTrue(RulesStore.importAllAppsEnabled())
+        RulesStore.setImportAllAppsEnabled(false)
+        XCTAssertFalse(RulesStore.importAllAppsEnabled())
     }
 }

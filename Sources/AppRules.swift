@@ -5,17 +5,25 @@ import AppKit
 enum InputRule: Equatable {
     case source(String) // input source ID, e.g. "com.apple.keylayout.Hebrew-PC"
     case auto
+    case undefined
 
     var sourceID: String? { if case .source(let id) = self { return id }; return nil }
     var isAuto: Bool { if case .auto = self { return true }; return false }
+    var isUndefined: Bool { if case .undefined = self { return true }; return false }
 
     var fallbackSymbol: String { isAuto ? "globe" : "keyboard" }
 
     // Persisted string form.
     static let autoToken = "__auto__"
-    var storageValue: String { isAuto ? Self.autoToken : (sourceID ?? "") }
+    static let undefinedToken = "__undefined__"
+    var storageValue: String {
+        if isAuto { return Self.autoToken }
+        if isUndefined { return Self.undefinedToken }
+        return sourceID ?? ""
+    }
     init?(storage: String) {
         if storage == Self.autoToken { self = .auto }
+        else if storage == Self.undefinedToken { self = .undefined }
         else if !storage.isEmpty { self = .source(storage) }
         else { return nil }
     }
@@ -35,6 +43,7 @@ struct AppRule {
     let bundleID: String  // resolves the app's real icon
     let rule: InputRule   // effective rule (default merged with any user override)
     let isCustom: Bool    // user-added (removable) vs. built-in
+    let isImported: Bool  // shown because "Import all my apps" is enabled
     let kind: AppKind
 
     var isBrowser: Bool { kind == .browser }
@@ -49,35 +58,16 @@ struct CustomApp: Codable {
 }
 
 // Single source of truth for per-app input rules, shared by AppWatcher (to act)
-// and the preferences window (to display + edit). User edits (language overrides
-// and custom apps) are persisted via RulesStore and merged over these defaults.
+// and the preferences window (to display + edit). Ordinary apps are never
+// hardcoded: they are added explicitly or discovered when the user enables
+// "Import all my apps". Discovered ordinary apps default to .undefined, which
+// deliberately leaves the current input source untouched.
 enum AppRules {
 
-    // langHint ("en"/"he") is resolved to one of the user's enabled input
-    // sources at runtime; nil for browsers (they default to AUTO).
-    private static let defaults: [(name: String, bundleID: String, langHint: String?)] = [
-        ("PyCharm", "com.jetbrains.pycharm", "en"),
-        ("WebStorm", "com.jetbrains.WebStorm", "en"),
-        ("VSCodium", "com.vscodium", "en"),
-        ("Xcode", "com.apple.dt.Xcode", "en"),
-        ("LM Studio", "ai.elementlabs.lmstudio", "en"),
-        ("Ollama", "com.electron.ollama", "en"),
-        ("Keynote", "com.apple.Keynote", "en"),
-        ("Numbers", "com.apple.Numbers", "en"),
-        ("Final Cut Pro", "com.apple.FinalCut", "en"),
-        ("Motion", "com.apple.motionapp", "en"),
-        ("Compressor", "com.apple.Compressor", "en"),
-        ("Logic Pro", "com.apple.logic10", "en"),
-        ("GarageBand", "com.apple.garageband10", "en"),
-        ("Terminal", "com.apple.Terminal", "en"),
-        ("WhatsApp", "net.whatsapp.WhatsApp", "he"),
-        ("Pages", "com.apple.iWork.Pages", "he"),
-        ("zoom.us", "us.zoom.xos", "he"),
-    ]
+    private static var installedAppsProvider: () -> [CustomApp] = AppFinder.installedApps
 
     private static var builtinKeys: Set<String> {
-        Set(defaults.map { $0.name.lowercased() }
-            + BrowserCatalog.installed().map { $0.name.lowercased() })
+        Set(BrowserCatalog.installed().map { $0.name.lowercased() })
     }
 
     // Built-ins + custom apps, with persisted overrides applied. Built-ins the
@@ -85,25 +75,12 @@ enum AppRules {
     static var all: [AppRule] {
         let overrides = RulesStore.overrides()
         let hidden = RulesStore.hiddenBuiltins()
-        let sources = InputSourceCatalog.enabledSources() // resolve hints once
         var seen = Set<String>()
         var result: [AppRule] = []
         let browsers = BrowserCatalog.installed()
         let browserBundleIDs = Set(browsers.map { $0.bundleID.lowercased() })
-
-        for entry in defaults {
-            let key = entry.name.lowercased()
-            seen.insert(key)
-            guard !hidden.contains(key) else { continue }
-            result.append(AppRule(
-                name: entry.name,
-                bundleID: entry.bundleID,
-                rule: resolveRule(overrides[key], autoByDefault: false,
-                                  langHint: entry.langHint, sources: sources),
-                isCustom: false,
-                kind: .normal
-            ))
-        }
+        let customApps = RulesStore.customApps()
+        let customBundleIDs = Set(customApps.map { $0.bundleID.lowercased() })
 
         // LaunchServices-discovered browsers occupy the same position the old
         // hardcoded browser rows did: before custom apps, defaulting to AUTO.
@@ -117,14 +94,14 @@ enum AppRules {
             result.append(AppRule(
                 name: browser.name,
                 bundleID: browser.bundleID,
-                rule: resolveRule(overrides[key], autoByDefault: true,
-                                  langHint: nil, sources: sources),
+                rule: resolveRule(overrides[key], defaultRule: .auto),
                 isCustom: false,
+                isImported: false,
                 kind: .browser
             ))
         }
 
-        for custom in RulesStore.customApps() {
+        for custom in customApps {
             let key = custom.name.lowercased()
             guard !seen.contains(key) else { continue }
             // Identity for conversation-provider apps (e.g. Teams) is by BUNDLE
@@ -140,11 +117,34 @@ enum AppRules {
             result.append(AppRule(
                 name: custom.name,
                 bundleID: custom.bundleID,
-                rule: resolveRule(overrides[key], autoByDefault: false,
-                                  langHint: "en", sources: sources),
+                rule: resolveRule(overrides[key], defaultRule: .undefined),
                 isCustom: true,
+                isImported: false,
                 kind: .normal
             ))
+        }
+
+        if RulesStore.importAllAppsEnabled() {
+            for imported in installedAppsProvider() {
+                let key = normalizedName(imported.name)
+                let bundleKey = imported.bundleID.lowercased()
+                guard !key.isEmpty, !bundleKey.isEmpty,
+                      imported.bundleID != Bundle.main.bundleIdentifier,
+                      !seen.contains(key),
+                      !customBundleIDs.contains(bundleKey),
+                      !browserBundleIDs.contains(bundleKey),
+                      ConversationProviderRegistry.provider(forBundleID: imported.bundleID) == nil,
+                      !hidden.contains(key) else { continue }
+                seen.insert(key)
+                result.append(AppRule(
+                    name: imported.name,
+                    bundleID: imported.bundleID,
+                    rule: resolveRule(overrides[key], defaultRule: .undefined),
+                    isCustom: false,
+                    isImported: true,
+                    kind: .normal
+                ))
+            }
         }
 
         // Conversation-provider apps (e.g. Teams): listed when installed, like
@@ -158,33 +158,20 @@ enum AppRules {
             result.append(AppRule(
                 name: app.displayName,
                 bundleID: app.bundleID,
-                rule: resolveRule(overrides[key], autoByDefault: true,
-                                  langHint: nil, sources: sources),
+                rule: resolveRule(overrides[key], defaultRule: .auto),
                 isCustom: false,
+                isImported: false,
                 kind: .conversation
             ))
         }
         return result
     }
 
-    // An explicit override wins; otherwise apps that manage input automatically
-    // (browsers, conversation apps) default to AUTO, and others to the enabled
-    // source matching their language hint (else the first source).
-    private static func resolveRule(_ override: String?, autoByDefault: Bool,
-                                    langHint: String?, sources: [InputSourceInfo]) -> InputRule {
+    // An explicit override wins. Browsers/conversation apps pass .auto;
+    // ordinary apps pass .undefined so merely listing one never changes layout.
+    private static func resolveRule(_ override: String?, defaultRule: InputRule) -> InputRule {
         if let override, let rule = InputRule(storage: override) { return rule }
-        if autoByDefault { return .auto }
-        if let hint = langHint,
-           let id = (sources.first { $0.languageCodes.first == hint }
-                     ?? sources.first { $0.languageCodes.contains(hint) })?.id {
-            return .source(id)
-        }
-        // macOS always has at least one enabled keyboard source, so this guard holds
-        // in practice. Falling back to AUTO (rather than an empty-ID .source that
-        // InputRule itself rejects and switchTo can't apply) keeps the degenerate
-        // empty case a harmless no-op.
-        guard let first = sources.first else { return .auto }
-        return .source(first.id)
+        return defaultRule
     }
 
     // All apps the user can configure, sorted alphabetically. Browsers get an
@@ -240,9 +227,36 @@ enum AppRules {
     }
 
     static func setRule(_ rule: InputRule, for app: AppRule) {
-        RulesStore.set(rule.storageValue, forMatchKey: app.matchKey)
+        if rule.isUndefined {
+            RulesStore.clearOverride(matchKey: app.matchKey)
+        } else {
+            if app.isImported,
+               !RulesStore.customApps().contains(where: {
+                   $0.bundleID.caseInsensitiveCompare(app.bundleID) == .orderedSame
+               }) {
+                RulesStore.addCustomApp(CustomApp(name: app.name, bundleID: app.bundleID))
+            }
+            RulesStore.set(rule.storageValue, forMatchKey: app.matchKey)
+        }
         NotificationCenter.default.post(name: .appRulesChanged, object: nil)
     }
+
+    static var importsAllApps: Bool { RulesStore.importAllAppsEnabled() }
+
+    static func setImportsAllApps(_ enabled: Bool) {
+        RulesStore.setImportAllAppsEnabled(enabled)
+        NotificationCenter.default.post(name: .appRulesChanged, object: nil)
+    }
+
+    #if DEBUG
+    static func setInstalledAppsProviderForTesting(_ provider: @escaping () -> [CustomApp]) {
+        installedAppsProvider = provider
+    }
+
+    static func resetInstalledAppsProviderForTesting() {
+        installedAppsProvider = AppFinder.installedApps
+    }
+    #endif
 
     // Remove an app so it no longer follows any rule: custom apps are deleted,
     // built-ins are hidden (persisted) so they don't reappear.
@@ -306,6 +320,7 @@ enum RulesStore {
     private static let overridesKey = "appInputOverrides"
     private static let customKey = "customApps"
     private static let hiddenKey = "hiddenBuiltins"
+    private static let importAllKey = "importAllApps"
 
     // Raw override strings keyed by app matchKey (an input source ID or the
     // AUTO token); interpreted by AppRules.
@@ -317,6 +332,14 @@ enum RulesStore {
         var raw = overrides()
         raw[matchKey] = value
         AppDefaults.store.set(raw, forKey: overridesKey)
+    }
+
+    static func importAllAppsEnabled() -> Bool {
+        AppDefaults.store.bool(forKey: importAllKey)
+    }
+
+    static func setImportAllAppsEnabled(_ enabled: Bool) {
+        AppDefaults.store.set(enabled, forKey: importAllKey)
     }
 
     static func customApps() -> [CustomApp] {
@@ -359,7 +382,7 @@ enum RulesStore {
         AppDefaults.store.set(Array(hidden), forKey: hiddenKey)
     }
 
-    private static func clearOverride(matchKey: String) {
+    static func clearOverride(matchKey: String) {
         var raw = overrides()
         raw[matchKey] = nil
         AppDefaults.store.set(raw, forKey: overridesKey)

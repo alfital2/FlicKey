@@ -2,14 +2,16 @@ import XCTest
 
 final class AppRulesTests: XCTestCase {
 
-    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins"]
+    private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins", "importAllApps"]
     override func setUp() {
         keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
         BrowserCatalog.resetApplicationURLsProviderForTesting()
+        AppRules.resetInstalledAppsProviderForTesting()
     }
     override func tearDown() {
         keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
         BrowserCatalog.resetApplicationURLsProviderForTesting()
+        AppRules.resetInstalledAppsProviderForTesting()
     }
 
     func testEditableIsSortedAlphabetically() {
@@ -18,8 +20,8 @@ final class AppRulesTests: XCTestCase {
         XCTAssertEqual(names, sorted)
     }
 
-    func testKnownBuiltinHasRule() {
-        XCTAssertNotNil(AppRules.rule(forNormalizedName: "terminal"))
+    func testOrdinaryAppsAreNotHardcoded() {
+        XCTAssertNil(AppRules.rule(forNormalizedName: "terminal"))
     }
 
     func testUnknownAppHasNoRule() {
@@ -35,11 +37,13 @@ final class AppRulesTests: XCTestCase {
         XCTAssertFalse(AppRules.all.contains { $0.matchKey == "zztestapp" })
     }
 
-    func testAddingDuplicateOfBuiltinFails() {
+    func testAddingDuplicateCustomAppFails() {
+        XCTAssertTrue(AppRules.addCustom(CustomApp(name: "Terminal", bundleID: "com.apple.Terminal")))
         XCTAssertFalse(AppRules.addCustom(CustomApp(name: "Terminal", bundleID: "com.apple.Terminal")))
     }
 
     func testSetRuleOverrideIsHonored() {
+        XCTAssertTrue(AppRules.addCustom(CustomApp(name: "Terminal", bundleID: "com.apple.Terminal")))
         guard let app = AppRules.all.first(where: { $0.matchKey == "terminal" }) else {
             return XCTFail("Terminal missing")
         }
@@ -48,21 +52,51 @@ final class AppRulesTests: XCTestCase {
                        .source("com.apple.keylayout.TestLayout"))
     }
 
-    func testCustomAppResolvesToASource() {
+    func testCustomAppDefaultsToUndefined() {
         AppRules.addCustom(CustomApp(name: "ZZApp", bundleID: "com.test.zz"))
         let app = AppRules.all.first { $0.matchKey == "zzapp" }
-        XCTAssertNotNil(app?.rule.sourceID, "custom app should resolve to a concrete source")
+        XCTAssertEqual(app?.rule, .undefined)
     }
 
-    func testReAddingRemovedBuiltinRestoresIt() {
-        guard let terminal = AppRules.all.first(where: { $0.matchKey == "terminal" }) else {
-            return XCTFail("Terminal missing")
+    func testImportAllListsOrdinaryAppsAsUndefined() {
+        AppRules.setInstalledAppsProviderForTesting {
+            [CustomApp(name: "Example Editor", bundleID: "com.test.editor")]
         }
-        AppRules.remove(terminal) // hides the built-in
-        XCTAssertFalse(AppRules.all.contains { $0.matchKey == "terminal" })
+        AppRules.setImportsAllApps(true)
 
-        XCTAssertTrue(AppRules.addCustom(CustomApp(name: "Terminal", bundleID: "com.apple.Terminal")))
-        XCTAssertTrue(AppRules.all.contains { $0.matchKey == "terminal" })
+        let app = AppRules.all.first { $0.bundleID == "com.test.editor" }
+        XCTAssertEqual(app?.rule, .undefined)
+        XCTAssertTrue(app?.isImported == true)
+        XCTAssertEqual(AppRules.rule(forBundleID: "com.test.editor", normalizedName: "renamed"),
+                       .undefined)
+    }
+
+    func testImportedUndefinedAppDisappearsWhenImportIsTurnedOff() {
+        AppRules.setInstalledAppsProviderForTesting {
+            [CustomApp(name: "Example Editor", bundleID: "com.test.editor")]
+        }
+        AppRules.setImportsAllApps(true)
+        XCTAssertNotNil(AppRules.all.first { $0.bundleID == "com.test.editor" })
+
+        AppRules.setImportsAllApps(false)
+        XCTAssertNil(AppRules.all.first { $0.bundleID == "com.test.editor" })
+    }
+
+    func testChoosingSourcePersistsImportedAppAndEnforcesAfterImportIsOff() {
+        AppRules.setInstalledAppsProviderForTesting {
+            [CustomApp(name: "Example Editor", bundleID: "com.test.editor")]
+        }
+        AppRules.setImportsAllApps(true)
+        guard let imported = AppRules.all.first(where: { $0.bundleID == "com.test.editor" }) else {
+            return XCTFail("imported app missing")
+        }
+
+        AppRules.setRule(.source("test.layout"), for: imported)
+        AppRules.setImportsAllApps(false)
+
+        XCTAssertTrue(RulesStore.customApps().contains { $0.bundleID == "com.test.editor" })
+        XCTAssertEqual(AppRules.rule(forBundleID: "com.test.editor", normalizedName: "renamed"),
+                       .source("test.layout"))
     }
 
     // A conversation-provider app (Teams) is identified by BUNDLE ID, not name.

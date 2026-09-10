@@ -16,6 +16,15 @@ enum AppFinder {
         "/System/Applications/Utilities",
         NSHomeDirectory() + "/Applications",
     ]
+    private static var installedCache: [CustomApp]?
+
+    private static func applicationURLs() -> [URL] {
+        let fm = FileManager.default
+        return searchDirs.flatMap { dir -> [URL] in
+            (try? fm.contentsOfDirectory(at: URL(fileURLWithPath: dir),
+                                         includingPropertiesForKeys: nil)) ?? []
+        }.filter { $0.pathExtension.caseInsensitiveCompare("app") == .orderedSame }
+    }
 
     // All apps whose name contains the query, prefix-matches first then
     // alphabetical. Same-named apps get a `location` to tell them apart.
@@ -23,11 +32,7 @@ enum AppFinder {
         let q = query.lowercased().trimmingCharacters(in: .whitespaces)
         guard !q.isEmpty else { return [] }
 
-        let fm = FileManager.default
-        let urls = searchDirs.flatMap { dir -> [URL] in
-            (try? fm.contentsOfDirectory(at: URL(fileURLWithPath: dir),
-                                         includingPropertiesForKeys: nil)) ?? []
-        }.filter { $0.pathExtension == "app" }
+        let urls = applicationURLs()
 
         let matched = urls.filter { displayName(of: $0).lowercased().contains(q) }
         let sorted = matched.sorted { a, b in
@@ -55,6 +60,28 @@ enum AppFinder {
 
     static func info(at url: URL) -> CustomApp {
         CustomApp(name: displayName(of: url), bundleID: Bundle(url: url)?.bundleIdentifier ?? "")
+    }
+
+    // All top-level applications in the standard macOS install locations.
+    // Bundle identity deduplicates apps that appear through more than one path.
+    static func installedApps() -> [CustomApp] {
+        if let installedCache { return installedCache }
+        var seenBundleIDs = Set<String>()
+        let apps = applicationURLs().compactMap { url -> CustomApp? in
+            let app = info(at: url)
+            let bundleKey = app.bundleID.lowercased()
+            guard !app.name.isEmpty, !bundleKey.isEmpty,
+                  seenBundleIDs.insert(bundleKey).inserted else { return nil }
+            return app
+        }.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+        installedCache = apps
+        return apps
+    }
+
+    static func invalidateInstalledApps() {
+        installedCache = nil
     }
 
     private static func displayName(of url: URL) -> String {
