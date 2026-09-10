@@ -1,6 +1,6 @@
 ## Status
 
-The opt-in imported-app rules feature and validated Firefox support are merged into `dev`. Auto-fix now detects and self-recovers when its global keyboard monitor cannot start because Accessibility has not yet been granted: it retries until available, monitors later revocation, exposes a warning in General settings, and leaves categorical unavailable/recovered events in opted-in diagnostics. Build 52 is the current Release test artifact; Debug QA unlock and real Release licensing remain separated.
+The opt-in imported-app rules feature is merged into `dev` at `f0c5349`, alongside the validated Firefox support. No ordinary apps are hardcoded: users can import installed apps as `Not defined`, and only an explicit language choice enables per-app enforcement. Existing explicit rules migrate while untouched legacy defaults disappear. Debug QA builds unlock automatically, but Release builds retain real licensing. A signed universal Release build 51 from merged `dev` is currently running locally.
 
 ## Recent changes
 
@@ -16,19 +16,17 @@ The opt-in imported-app rules feature and validated Firefox support are merged i
 - Built arm64 Debug QA build 51. Its exact mounted DMG passes `hdiutil verify` and strict nested signature verification.
 - Merged `feature/import-all-apps` into `dev` after all 500 unit tests passed.
 - Built a universal Release configuration from merged `dev`, verified it contains no QA-unlock marker, verified its complete nested signature, and launched it with no arguments from `dist/dev-release-b51/FlicKey-0.5.4-build51-dev-release-universal.app`.
-- Diagnosed auto-fix startup failure after live Accessibility grant: Firefox/manual AX recovered dynamically, but the global typing monitor had been created too early and was not retried.
-- Added an idempotent monitor install, permission-aware retry/backoff, continuous health checks, visible Settings warning, and privacy-safe unavailable/recovered diagnostic events.
-- Added retry-policy and diagnostic-schema coverage. Full unit suite passes 502/502; universal Release build 52 passes strict nested signature verification.
 
 ## Open questions / blockers
 
-- Build 52 needs live approval of auto-fix recovery and the imported-app interaction.
+- The merged build needs the user's final visual/behavioral approval, especially the checkbox wording and upgrade behavior.
 - The build-51 DMG is Apple-Development signed for arm64 QA and intentionally not a notarized release artifact.
 
 ## Next steps
 
-1. Validate auto-fix in build 52 after a normal launch with Accessibility already granted.
-2. Validate the self-heal path on QA by granting Accessibility after launch and confirming no relaunch is needed.
-3. Finish imported-app upgrade/interaction validation, then promote from `dev` only after approval.
+1. Validate the Apps pane in the running Release build: checkbox off/on, `Not defined`, explicit switching, and off again.
+2. Confirm on a clean QA Mac that the separate Debug build 51 opens unlocked without arguments or a license key.
+3. Confirm an existing explicitly configured app remains listed and enforced after update.
+4. Promote from `dev` only after final approval.
 
 _Last updated: 2026-09-10 by Codex_

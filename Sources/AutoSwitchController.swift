@@ -68,16 +68,6 @@ final class AutoSwitchController {
     // "resume" can't un-suspend the tracker in the middle of a later one.
     private var editGeneration = 0
 
-    // Accessibility may be granted after launch. A global NSEvent monitor made
-    // before then can be absent or inert, so defer installation until trust is
-    // present and keep checking. The same loop notices later permission
-    // revocation and rebuilds the monitor when access returns.
-    private var monitorCheck: DispatchWorkItem?
-    private var monitorGeneration = 0
-    private var monitorRecovery = AutoSwitchMonitorRecoverySchedule()
-    private var monitorUnavailableLogged = false
-    private static let monitorHealthyCheckInterval: TimeInterval = 10
-
     // MARK: - Lifecycle
 
     func start() {
@@ -122,7 +112,7 @@ final class AutoSwitchController {
                 self.rescheduleFireIfPending()
             }
         }
-        beginMonitorHealthChecks()
+        tracker.start()
     }
 
     // Spaced dictionary warm-up: probe now, then again at growing intervals while
@@ -140,69 +130,12 @@ final class AutoSwitchController {
     }
 
     func stop() {
-        monitorGeneration += 1
-        monitorCheck?.cancel()
-        monitorCheck = nil
-        monitorRecovery.reset()
-        monitorUnavailableLogged = false
         tracker.stop()
-        AutoSwitchMonitorHealth.set(.inactive)
         streak.breakRun()
         carriedOpaque = 0
         disarmFire()
         pendingUndo = nil
         pendingApproval = nil
-    }
-
-    private func beginMonitorHealthChecks() {
-        monitorGeneration += 1
-        monitorCheck?.cancel()
-        monitorRecovery.reset()
-        monitorUnavailableLogged = false
-        checkTypingMonitor(generation: monitorGeneration)
-    }
-
-    private func checkTypingMonitor(generation: Int) {
-        guard generation == monitorGeneration, AutoSwitchSettings.isEnabled else { return }
-
-        let trusted = AXIsProcessTrusted()
-        let active: Bool
-        if trusted {
-            active = tracker.start()
-        } else {
-            // Discard any token created before trust was granted. Reinstalling
-            // after the transition avoids a non-nil but non-delivering monitor.
-            tracker.stop()
-            active = false
-        }
-
-        if active {
-            if monitorUnavailableLogged {
-                Diag.log(.autoSwitchMonitorRecovered(attempts: monitorRecovery.attemptsIssued))
-            }
-            monitorUnavailableLogged = false
-            monitorRecovery.reset()
-            AutoSwitchMonitorHealth.set(.available)
-            scheduleMonitorCheck(after: Self.monitorHealthyCheckInterval, generation: generation)
-            return
-        }
-
-        let issue: AutoSwitchMonitorIssue = trusted ? .monitorCreationFailed : .accessibilityDenied
-        if !monitorUnavailableLogged {
-            Diag.log(.autoSwitchMonitorUnavailable(reason: issue))
-            monitorUnavailableLogged = true
-        }
-        AutoSwitchMonitorHealth.set(.unavailable(issue))
-        scheduleMonitorCheck(after: monitorRecovery.takeNextDelay(), generation: generation)
-    }
-
-    private func scheduleMonitorCheck(after delay: TimeInterval, generation: Int) {
-        monitorCheck?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            self?.checkTypingMonitor(generation: generation)
-        }
-        monitorCheck = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     // Called after the undo window: if this fix's words are still on probation

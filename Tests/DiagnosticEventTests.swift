@@ -24,8 +24,6 @@ final class DiagnosticEventTests: XCTestCase {
             .autoSwitchUndone(wordsRejected: 2),
             .autoSwitchRejected(reason: .noValidSwap, script: "latin", wordLength: 5),
             .autoSwitchRunBroken(by: .key),
-            .autoSwitchMonitorUnavailable(reason: .accessibilityDenied),
-            .autoSwitchMonitorRecovered(attempts: 3),
             .autoSwitchRewriteAnomaly(kind: .orphanFragment),
             .autoSwitchRewriteAnomaly(kind: .tailMutated),
             .autoSwitchSpanFallback(reason: .axUnreadable),
@@ -69,12 +67,6 @@ final class DiagnosticEventTests: XCTestCase {
         XCTAssertEqual(
             DiagnosticEvent.autoSwitchRunBroken(by: .key).line,
             "auto-switch run broken by key")
-        XCTAssertEqual(
-            DiagnosticEvent.autoSwitchMonitorUnavailable(reason: .monitorCreationFailed).line,
-            "auto-switch monitor unavailable: monitorCreationFailed")
-        XCTAssertEqual(
-            DiagnosticEvent.autoSwitchMonitorRecovered(attempts: 3).line,
-            "auto-switch monitor recovered after 3 retries")
         XCTAssertEqual(
             DiagnosticEvent.autoSwitchRewriteAnomaly(kind: .orphanFragment).line,
             "auto-switch rewrite anomaly: orphanFragment")

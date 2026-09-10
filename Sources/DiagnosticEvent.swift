@@ -62,10 +62,6 @@ enum DiagnosticEvent: Codable, Equatable {
     case autoSwitchUndone(wordsRejected: Int)                     // count, never the words
     case autoSwitchRejected(reason: AutoSwitchRejectReason, script: String, wordLength: Int)
     case autoSwitchRunBroken(by: RegionBreakKind)                 // only while a streak was open
-    // Health of the global keyboard monitor. Categorical only: this lets a
-    // support report explain why no word-level events exist at all.
-    case autoSwitchMonitorUnavailable(reason: AutoSwitchMonitorIssue)
-    case autoSwitchMonitorRecovered(attempts: Int)
     // After a rewrite, the field's tail didn't match the intended text: a macOS
     // text service (autocorrect/replacement) mutated the buffer around the edit.
     // Categorical only — the mismatching text is never logged.
@@ -107,10 +103,6 @@ enum DiagnosticEvent: Codable, Equatable {
             return "auto-switch rejected: \(reason.rawValue) (\(script), \(wordLength) chars)"
         case .autoSwitchRunBroken(let kind):
             return "auto-switch run broken by \(kind.rawValue)"
-        case .autoSwitchMonitorUnavailable(let reason):
-            return "auto-switch monitor unavailable: \(reason.rawValue)"
-        case .autoSwitchMonitorRecovered(let attempts):
-            return "auto-switch monitor recovered after \(attempts) retries"
         case .autoSwitchRewriteAnomaly(let kind):
             return "auto-switch rewrite anomaly: \(kind.rawValue)"
         case .autoSwitchSpanFallback(let reason):
