@@ -1,6 +1,6 @@
 ## Status
 
-The opt-in imported-app rules feature and validated Firefox support are merged into `dev`. Auto-fix now detects and self-recovers when its global keyboard monitor cannot start because Accessibility has not yet been granted: it retries until available, monitors later revocation, exposes a warning in General settings, and leaves categorical unavailable/recovered events in opted-in diagnostics. Build 52 is the current Release test artifact; Debug QA unlock and real Release licensing remain separated.
+The opt-in imported-app rules feature and validated Firefox support are merged into `dev`. Auto-fix now detects and self-recovers when its global keyboard monitor cannot start because Accessibility has not yet been granted: it retries during startup until available, then stops polling, exposes a warning in General settings, and leaves categorical unavailable/recovered events in opted-in diagnostics. Build 53 is the current Release test artifact; Debug QA unlock and real Release licensing remain separated.
 
 ## Recent changes
 
@@ -17,17 +17,17 @@ The opt-in imported-app rules feature and validated Firefox support are merged i
 - Merged `feature/import-all-apps` into `dev` after all 500 unit tests passed.
 - Built a universal Release configuration from merged `dev`, verified it contains no QA-unlock marker, verified its complete nested signature, and launched it with no arguments from `dist/dev-release-b51/FlicKey-0.5.4-build51-dev-release-universal.app`.
 - Diagnosed auto-fix startup failure after live Accessibility grant: Firefox/manual AX recovered dynamically, but the global typing monitor had been created too early and was not retried.
-- Added an idempotent monitor install, permission-aware retry/backoff, continuous health checks, visible Settings warning, and privacy-safe unavailable/recovered diagnostic events.
-- Added retry-policy and diagnostic-schema coverage. Full unit suite passes 502/502; universal Release build 52 passes strict nested signature verification.
+- Added an idempotent monitor install, permission-aware startup retry/backoff, visible Settings warning, and privacy-safe unavailable/recovered diagnostic events. Retry stops permanently once the monitor starts.
+- Added retry-policy and diagnostic-schema coverage. Full unit suite passes 502/502; build 53 awaits the final Release rebuild.
 
 ## Open questions / blockers
 
-- Build 52 needs live approval of auto-fix recovery and the imported-app interaction.
+- Build 53 needs live approval of auto-fix recovery and the imported-app interaction.
 - The build-51 DMG is Apple-Development signed for arm64 QA and intentionally not a notarized release artifact.
 
 ## Next steps
 
-1. Validate auto-fix in build 52 after a normal launch with Accessibility already granted.
+1. Validate auto-fix in build 53 after a normal launch with Accessibility already granted.
 2. Validate the self-heal path on QA by granting Accessibility after launch and confirming no relaunch is needed.
 3. Finish imported-app upgrade/interaction validation, then promote from `dev` only after approval.
 

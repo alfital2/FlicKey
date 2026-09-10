@@ -38,9 +38,8 @@ enum AutoSwitchMonitorHealth {
     }
 }
 
-// Retry quickly while the user is granting permission, then settle at a cheap
-// ten-second health check. It never gives up: Accessibility can be granted or
-// revoked at any time while FlicKey is running.
+// Retry quickly while the user is granting permission, then stop as soon as the
+// monitor is live. There is no steady-state polling cost.
 struct AutoSwitchMonitorRecoverySchedule {
     static let delays: [TimeInterval] = [0.25, 0.5, 1, 2, 5, 10]
     private(set) var attemptsIssued = 0

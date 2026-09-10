@@ -70,13 +70,12 @@ final class AutoSwitchController {
 
     // Accessibility may be granted after launch. A global NSEvent monitor made
     // before then can be absent or inert, so defer installation until trust is
-    // present and keep checking. The same loop notices later permission
-    // revocation and rebuilds the monitor when access returns.
+    // present and retry during startup. Once the monitor is live, polling stops;
+    // a later permission change is handled naturally on the next app launch.
     private var monitorCheck: DispatchWorkItem?
     private var monitorGeneration = 0
     private var monitorRecovery = AutoSwitchMonitorRecoverySchedule()
     private var monitorUnavailableLogged = false
-    private static let monitorHealthyCheckInterval: TimeInterval = 10
 
     // MARK: - Lifecycle
 
@@ -183,7 +182,7 @@ final class AutoSwitchController {
             monitorUnavailableLogged = false
             monitorRecovery.reset()
             AutoSwitchMonitorHealth.set(.available)
-            scheduleMonitorCheck(after: Self.monitorHealthyCheckInterval, generation: generation)
+            monitorCheck = nil
             return
         }
 
