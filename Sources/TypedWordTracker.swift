@@ -103,17 +103,27 @@ final class TypedWordTracker {
     private static let watched: NSEvent.EventTypeMask =
         [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown]
 
-    func start() {
-        guard globalMonitor == nil else { return }
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: Self.watched) {
-            [weak self] event in self?.handle(event)
+    // Returns whether the global keyboard monitor is live. Each component is
+    // installed independently so a failed global monitor can be retried without
+    // duplicating the local monitor or workspace observer.
+    @discardableResult
+    func start() -> Bool {
+        if globalMonitor == nil {
+            globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: Self.watched) {
+                [weak self] event in self?.handle(event)
+            }
         }
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.watched) {
-            [weak self] event in self?.handle(event); return event
+        if localMonitor == nil {
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: Self.watched) {
+                [weak self] event in self?.handle(event); return event
+            }
         }
-        activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
-        ) { [weak self] _ in self?.accumulator.reset(); self?.onRegionBreak?(.appSwitch) }
+        if activationObserver == nil {
+            activationObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
+            ) { [weak self] _ in self?.accumulator.reset(); self?.onRegionBreak?(.appSwitch) }
+        }
+        return globalMonitor != nil
     }
 
     func stop() {

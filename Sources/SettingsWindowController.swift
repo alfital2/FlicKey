@@ -151,6 +151,7 @@ final class GeneralSettingsViewController: NSViewController {
     private let launchSwitch = NSSwitch()
     private let autoUpdateSwitch = NSSwitch()
     private let autoCorrectSwitch = NSSwitch()
+    private let autoCorrectHealth = NSTextField(wrappingLabelWithString: "")
     private let iconPopup = NSPopUpButton(frame: .zero, pullsDown: false)
     private let blocklist = AutoSwitchBlocklistController()
 
@@ -171,6 +172,12 @@ final class GeneralSettingsViewController: NSViewController {
         let checkNow = NSButton(title: "Check for Updates Now",
                                 target: self, action: #selector(checkNow))
         checkNow.bezelStyle = .rounded
+
+        autoCorrectHealth.textColor = .systemOrange
+        autoCorrectHealth.isHidden = true
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(refreshAutoCorrectHealth),
+            name: .autoSwitchMonitorHealthChanged, object: nil)
 
         #if DEBUG
         let versionLabel = "FlicKey \(appShortVersion) Firefox (QA TEST BUILD — Unlocked)"
@@ -193,6 +200,7 @@ final class GeneralSettingsViewController: NSViewController {
             sectionHeader("Startup"), cards[0],
             spacer(6),
             sectionHeader("Typing"), cards[3],
+            autoCorrectHealth,
             settingsFootnote("Fixes and switches the layout after you type two words in the wrong keyboard language. Undo the last fix with ⌥⌥ (double-tap Option); undo the same word twice and FlicKey stops auto-switching it."),
             manageBlocked,
             settingsFootnote("Bug reports from Improve add auto-switch details (layouts, working dictionaries, timing), never what you type. FlicKey also shares words it wrongly fixed so it can learn; turn that off in Improve."),
@@ -211,6 +219,7 @@ final class GeneralSettingsViewController: NSViewController {
         launchSwitch.state = LaunchAtLogin.isEnabled ? .on : .off
         autoUpdateSwitch.state = (UITestMode.isActive ? true : Updater.shared.automaticallyChecksForUpdates) ? .on : .off
         autoCorrectSwitch.state = AutoSwitchSettings.isEnabled ? .on : .off
+        refreshAutoCorrectHealth()
         if let idx = MenuBarIconStyle.allCases.firstIndex(of: MenuBarIcon.style) {
             iconPopup.selectItem(at: idx)
         }
@@ -230,6 +239,24 @@ final class GeneralSettingsViewController: NSViewController {
 
     @objc private func toggleAutoCorrect() {
         AutoSwitchSettings.isEnabled = (autoCorrectSwitch.state == .on)
+        refreshAutoCorrectHealth()
+    }
+
+    @objc private func refreshAutoCorrectHealth() {
+        guard AutoSwitchSettings.isEnabled else {
+            autoCorrectHealth.isHidden = true
+            return
+        }
+        switch AutoSwitchMonitorHealth.state {
+        case .inactive, .available:
+            autoCorrectHealth.isHidden = true
+        case .unavailable(.accessibilityDenied):
+            autoCorrectHealth.stringValue = "Auto-fix is waiting for Accessibility permission and will start automatically when access is granted."
+            autoCorrectHealth.isHidden = false
+        case .unavailable(.monitorCreationFailed):
+            autoCorrectHealth.stringValue = "Auto-fix could not start its keyboard monitor. FlicKey is retrying automatically."
+            autoCorrectHealth.isHidden = false
+        }
     }
 
     @objc private func manageBlockedWords() {
