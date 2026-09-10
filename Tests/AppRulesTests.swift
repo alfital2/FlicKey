@@ -99,6 +99,25 @@ final class AppRulesTests: XCTestCase {
                        .source("test.layout"))
     }
 
+    func testExistingExplicitRuleMigratesWithoutRestoringUntouchedDefaults() {
+        AppRules.setInstalledAppsProviderForTesting {
+            [
+                CustomApp(name: "Configured App", bundleID: "com.test.configured"),
+                CustomApp(name: "Untouched App", bundleID: "com.test.untouched"),
+            ]
+        }
+        RulesStore.set("test.saved.layout", forMatchKey: "configured app")
+
+        XCTAssertEqual(AppRules.rule(forBundleID: "com.test.configured",
+                                     normalizedName: "configured app"),
+                       .source("test.saved.layout"))
+        XCTAssertTrue(RulesStore.customApps().contains {
+            $0.bundleID == "com.test.configured"
+        })
+        XCTAssertNil(AppRules.rule(forBundleID: "com.test.untouched",
+                                   normalizedName: "untouched app"))
+    }
+
     // A conversation-provider app (Teams) is identified by BUNDLE ID, not name.
     // Adding it as a custom entry — under any name/variant — must be refused, so
     // it can't create a duplicate row nor a forced .normal row that shadows the

@@ -66,6 +66,35 @@ enum AppRules {
 
     private static var installedAppsProvider: () -> [CustomApp] = AppFinder.installedApps
 
+    // Older releases knew ordinary apps through a hardcoded catalog, so an
+    // explicitly chosen source could exist without a persisted app identity.
+    // Recover only those real user choices by matching their saved name keys to
+    // currently installed apps. Untouched old defaults had no override and are
+    // intentionally not migrated.
+    private static func migrateConfiguredOrdinaryApps() {
+        let overrides = RulesStore.overrides()
+        guard !overrides.isEmpty else { return }
+
+        let existing = RulesStore.customApps()
+        var names = Set(existing.map { normalizedName($0.name) })
+        var bundleIDs = Set(existing.map { $0.bundleID.lowercased() })
+
+        for app in installedAppsProvider() {
+            let key = normalizedName(app.name)
+            let bundleKey = app.bundleID.lowercased()
+            guard overrides[key] != nil,
+                  !key.isEmpty, !bundleKey.isEmpty,
+                  !names.contains(key), !bundleIDs.contains(bundleKey),
+                  BrowserCatalog.info(forBundleID: app.bundleID) == nil,
+                  ConversationProviderRegistry.provider(forBundleID: app.bundleID) == nil
+            else { continue }
+
+            RulesStore.addCustomApp(app)
+            names.insert(key)
+            bundleIDs.insert(bundleKey)
+        }
+    }
+
     private static var builtinKeys: Set<String> {
         Set(BrowserCatalog.installed().map { $0.name.lowercased() })
     }
@@ -73,6 +102,7 @@ enum AppRules {
     // Built-ins + custom apps, with persisted overrides applied. Built-ins the
     // user removed are hidden; uninstalled browsers are skipped.
     static var all: [AppRule] {
+        migrateConfiguredOrdinaryApps()
         let overrides = RulesStore.overrides()
         let hidden = RulesStore.hiddenBuiltins()
         var seen = Set<String>()
