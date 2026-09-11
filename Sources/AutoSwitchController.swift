@@ -67,11 +67,13 @@ final class AutoSwitchController {
     // Distinguishes overlapping synthetic edits so an earlier edit's scheduled
     // "resume" can't un-suspend the tracker in the middle of a later one.
     private var editGeneration = 0
+    private var started = false
 
     // MARK: - Lifecycle
 
     func start() {
-        guard AutoSwitchSettings.isEnabled else { return }
+        guard AutoSwitchSettings.isEnabled, !started else { return }
+        started = true
         // Warm AppleSpell before the first real word arrives, RETRYING across
         // launch: at boot (login-item start) the daemon can stay cold for
         // seconds, and a single early probe both misses and burns one of the
@@ -112,7 +114,7 @@ final class AutoSwitchController {
                 self.rescheduleFireIfPending()
             }
         }
-        tracker.start()
+        retryTypingMonitor()
     }
 
     // Spaced dictionary warm-up: probe now, then again at growing intervals while
@@ -130,12 +132,27 @@ final class AutoSwitchController {
     }
 
     func stop() {
+        started = false
         tracker.stop()
+        AutoSwitchMonitorHealth.set(.inactive)
         streak.breakRun()
         carriedOpaque = 0
         disarmFire()
         pendingUndo = nil
         pendingApproval = nil
+    }
+
+    // Called at start and again on event-driven Accessibility checks if monitor
+    // creation previously failed. There is deliberately no periodic timer.
+    func retryTypingMonitor() {
+        guard started, AutoSwitchSettings.isEnabled else { return }
+        guard AccessibilityAccess.isTrusted else {
+            tracker.stop()
+            AutoSwitchMonitorHealth.set(.unavailable(.accessibilityDenied))
+            return
+        }
+        let active = tracker.start()
+        AutoSwitchMonitorHealth.set(active ? .available : .unavailable(.monitorCreationFailed))
     }
 
     // Called after the undo window: if this fix's words are still on probation

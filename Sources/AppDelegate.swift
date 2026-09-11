@@ -11,8 +11,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let conversationMemory = AppConversationMemory()
     private let layoutCue = LayoutCueController()
     private let autoSwitch = AutoSwitchController()
+    private let accessibilityMonitor = AccessibilityTrustMonitor()
     private let trialEnded = TrialEndedController()
     private var coreStarted = false
+    private var accessibilityFeaturesRunning = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // UI tests: redirect all settings to a throwaway store BEFORE anything
@@ -51,6 +53,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         statusBar = StatusBarController(tabMemory: tabMemory)
         browserCatalogObserver.start()
+        accessibilityMonitor.onChange = { [weak self] trusted in
+            self?.accessibilityTrustChanged(trusted)
+        }
+        accessibilityMonitor.onCheck = { [weak self] trusted in
+            self?.accessibilityTrustChecked(trusted)
+        }
+        accessibilityMonitor.start()
         requestAccessibilityPermission()
 
         // After a conversion, switch the keyboard layout to the converted
@@ -78,7 +87,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             forName: .autoSwitchSettingChanged, object: nil, queue: .main) { [weak self] _ in
             guard let self, self.coreStarted else { return }   // gated when trial expired
-            AutoSwitchSettings.isEnabled ? self.autoSwitch.start() : self.autoSwitch.stop()
+            if AutoSwitchSettings.isEnabled {
+                if self.accessibilityMonitor.isTrusted { self.autoSwitch.start() }
+                else { AutoSwitchMonitorHealth.set(.unavailable(.accessibilityDenied)) }
+            } else {
+                self.autoSwitch.stop()
+            }
         }
 
         // Per-app automatic input switching. Browsers (AUTO) are handed to
@@ -186,12 +200,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard !coreStarted else { return }
         coreStarted = true
         SoundEffect.warm()   // preload the click so the first fix's sound is instant
-        hotkeyManager.start()
-        autoSwitch.start()          // self-gates on AutoSwitchSettings.isEnabled
         tabMemory.start()
         conversationMemory.start()
         appWatcher.start()
-        focusWatcher.start()
+        refreshAccessibilityFeatures()
+    }
+
+    private func accessibilityTrustChanged(_ trusted: Bool) {
+        guard coreStarted else { return }
+        refreshAccessibilityFeatures()
+    }
+
+    private func accessibilityTrustChecked(_ trusted: Bool) {
+        guard coreStarted, trusted, AutoSwitchSettings.isEnabled,
+              case .unavailable(.monitorCreationFailed) = AutoSwitchMonitorHealth.state
+        else { return }
+        autoSwitch.retryTypingMonitor()
+    }
+
+    private func refreshAccessibilityFeatures() {
+        guard coreStarted else { return }
+        if accessibilityMonitor.isTrusted {
+            if !accessibilityFeaturesRunning {
+                hotkeyManager.start()
+                focusWatcher.start()
+                accessibilityFeaturesRunning = true
+            }
+            if AutoSwitchSettings.isEnabled { autoSwitch.start() }
+        } else {
+            if accessibilityFeaturesRunning {
+                hotkeyManager.stop()
+                focusWatcher.stop()
+                accessibilityFeaturesRunning = false
+            }
+            autoSwitch.stop()
+            if AutoSwitchSettings.isEnabled {
+                AutoSwitchMonitorHealth.set(.unavailable(.accessibilityDenied))
+            }
+        }
     }
 
     // Gentle, never-blocking reminders, tailored to who the user is:
@@ -212,9 +258,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // Phase 1: prompt for Accessibility access. Real hotkey/AX usage comes later.
     private func requestAccessibilityPermission() {
-        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let options = [promptKey: true] as CFDictionary
-        let trusted = AXIsProcessTrustedWithOptions(options)
+        let trusted = AccessibilityAccess.requestIfNeeded()
 
         if !trusted {
             let alert = NSAlert()
@@ -231,13 +275,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.addButton(withTitle: "Later")
 
             if alert.runModal() == .alertFirstButtonReturn {
-                openAccessibilitySettings()
+                AccessibilityAccess.openSettings()
             }
         }
-    }
-
-    private func openAccessibilitySettings() {
-        let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!
-        NSWorkspace.shared.open(url)
     }
 }

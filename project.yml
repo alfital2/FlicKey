@@ -47,7 +47,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: FlicKey.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.talalfi.FlicKey
         MARKETING_VERSION: "0.5.4"
-        CURRENT_PROJECT_VERSION: "55"
+        CURRENT_PROJECT_VERSION: "56"
         ENABLE_HARDENED_RUNTIME: YES
       configs:
         # Debug builds are QA/test builds — flag them so a "QA TEST BUILD" marker
@@ -75,6 +75,7 @@ targets:
       - path: Sources/AppRouting.swift
       - path: Sources/AppRules.swift
       - path: Sources/AccessibilityURLReader.swift
+      - path: Sources/AccessibilityTrustMonitor.swift
       - path: Sources/AutoSwitchExceptions.swift
       - path: Sources/AutoSwitchSettings.swift
       - path: Sources/AutoSwitchStreak.swift

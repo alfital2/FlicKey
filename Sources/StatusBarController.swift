@@ -44,6 +44,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        addAccessibilityWarningIfNeeded(to: menu)
         addAutoSwitchWarningIfNeeded(to: menu)
         addSiteSection(to: menu)
 
@@ -51,6 +52,20 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(quit), keyEquivalent: "q").target = self
+    }
+
+    private func addAccessibilityWarningIfNeeded(to menu: NSMenu) {
+        guard !AccessibilityAccess.isTrusted else { return }
+        let item = NSMenuItem(title: "⚠️ Accessibility access required…",
+                              action: #selector(openAccessibilitySettings), keyEquivalent: "")
+        item.target = self
+        item.toolTip = "FlicKey cannot monitor typing or edit text until Accessibility access is enabled."
+        menu.addItem(item)
+        menu.addItem(.separator())
+    }
+
+    @objc private func openAccessibilitySettings() {
+        AccessibilityAccess.openSettings()
     }
 
     // Warn when macOS's "Automatically switch to a document's input source" is

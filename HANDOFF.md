@@ -1,13 +1,14 @@
 ## Status
 
-`dev` is the official development line. It contains Firefox and other discovered-browser per-site memory, no hardcoded ordinary-app catalog, “Import all my apps,” and an optional “Remember language for apps I use” mode. Listed ordinary apps learn manual input changes immediately; the optional mode also adds previously unseen apps and initializes their preference on first visit. The recent auto-fix monitor-health experiment remains reverted.
+`dev` is the official development line. It contains Firefox and other discovered-browser per-site memory, no hardcoded ordinary-app catalog, “Import all my apps,” and the optional “Remember language for apps I use” behavior. Accessibility-dependent features now monitor trust at startup and meaningful lifecycle events—without a timer—and pause or recover automatically when permission changes.
 
 ## Recent changes
 
-- Added the opt-in “Remember language for apps I use” checkbox to the Apps tab.
-- When enabled, first visiting an ordinary unlisted app adds it and stores the currently selected input source; later manual source changes update it.
-- Preserved saved preferences on return instead of replacing them with the prior app’s source, and kept browser/chat memory out of app-wide learning.
-- Bumped the local dev build to 0.5.4 (55); the full 508-test unit suite passes.
+- Added event-driven Accessibility trust checks on startup, app activation, wake, and session activation because macOS exposes a trust query but no permission-change notification.
+- Auto-fix, hotkeys, and focus watching now stop safely when Accessibility is revoked and restart automatically after trust returns.
+- Added an actionable Accessibility warning to the menu and an auto-fix status plus Settings button to General settings.
+- Track global keyboard-monitor creation failures separately and retry on the next lifecycle event rather than polling.
+- Bumped the local dev build to 0.5.4 (56); the full 511-test unit suite passes.
 
 ## Open questions / blockers
 
@@ -15,8 +16,8 @@
 
 ## Next steps
 
-1. Manually verify: enable “Remember language for apps I use,” visit an unlisted ordinary app, and confirm it appears with the active language.
-2. Change that app’s language, switch away/back, and confirm the newest preference is restored; separately smoke-test Firefox tab/site memory.
-3. If approved, prepare a Developer ID signed/notarized distributable from `dev` with a new build number.
+1. Revoke Accessibility, switch applications, and confirm the warning appears and auto-fix pauses.
+2. Restore Accessibility, switch back to FlicKey or another app, and confirm auto-fix recovers without relaunching; test with `akuo vnmc `.
+3. Repeat the permission and auto-fix checks in the UTM QA VM.
 
-_Last updated: 2026-09-11 by Codex_
+_Last updated: 2026-09-12 by Codex_
