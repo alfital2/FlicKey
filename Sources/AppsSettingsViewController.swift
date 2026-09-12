@@ -55,7 +55,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
         importAllCheckbox = importAll
 
         let rememberVisited = NSButton(
-            checkboxWithTitle: "Remember language for apps I use",
+            checkboxWithTitle: "Adds visited apps and remembers their last-used layout.",
             target: self,
             action: #selector(rememberVisitedChanged(_:)))
         rememberVisited.state = AppRules.remembersVisitedApps ? .on : .off
