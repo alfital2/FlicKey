@@ -47,7 +47,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: FlicKey.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.talalfi.FlicKey
         MARKETING_VERSION: "0.5.5"
-        CURRENT_PROJECT_VERSION: "58"
+        CURRENT_PROJECT_VERSION: "59"
         ENABLE_HARDENED_RUNTIME: YES
       configs:
         # Debug builds are QA/test builds — flag them so a "QA TEST BUILD" marker
