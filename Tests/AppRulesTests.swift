@@ -3,7 +3,7 @@ import XCTest
 final class AppRulesTests: XCTestCase {
 
     private let keys = ["appInputOverrides", "customApps", "hiddenBuiltins", "importAllApps",
-                        "rememberVisitedApps"]
+                        "rememberVisitedApps", "appLastUsedInputSources"]
     override func setUp() {
         keys.forEach { UserDefaults.standard.removeObject(forKey: $0) }
         BrowserCatalog.resetApplicationURLsProviderForTesting()
@@ -116,7 +116,9 @@ final class AppRulesTests: XCTestCase {
 
         XCTAssertTrue(RulesStore.customApps().contains { $0.bundleID == "com.test.editor" })
         XCTAssertEqual(AppRules.rule(forBundleID: "com.test.editor", normalizedName: "renamed"),
-                       .source("test.first-layout"))
+                       .auto)
+        XCTAssertEqual(AppLastUsedInputStore.sourceID(for: "com.test.editor"),
+                       "test.first-layout")
 
         AppRules.setImportsAllApps(false)
         guard let persisted = AppRules.appRule(forBundleID: "com.test.editor",
@@ -125,7 +127,42 @@ final class AppRulesTests: XCTestCase {
         }
         AppRules.rememberSource("test.second-layout", for: persisted)
         XCTAssertEqual(AppRules.rule(forBundleID: "com.test.editor", normalizedName: "renamed"),
-                       .source("test.second-layout"))
+                       .auto)
+        XCTAssertEqual(AppLastUsedInputStore.sourceID(for: "com.test.editor"),
+                       "test.second-layout")
+    }
+
+    func testFixedRuleIsNeverOverwrittenByObservedInputChanges() {
+        AppRules.addCustom(CustomApp(name: "Fixed App", bundleID: "com.test.fixed"))
+        guard let app = AppRules.appRule(forBundleID: "com.test.fixed",
+                                         normalizedName: "fixed app") else {
+            return XCTFail("fixed app missing")
+        }
+        AppRules.setRule(.source("test.fixed-layout"), for: app)
+        guard let fixed = AppRules.appRule(forBundleID: "com.test.fixed",
+                                           normalizedName: "fixed app") else {
+            return XCTFail("fixed rule missing")
+        }
+
+        AppRules.rememberSource("test.manual-layout", for: fixed)
+
+        XCTAssertEqual(AppRules.rule(forBundleID: "com.test.fixed",
+                                     normalizedName: "fixed app"),
+                       .source("test.fixed-layout"))
+        XCTAssertNil(AppLastUsedInputStore.sourceID(for: "com.test.fixed"))
+    }
+
+    func testRemovingAppClearsItsPersistentLastUsedValue() {
+        AppRules.addCustom(CustomApp(name: "Remembered App", bundleID: "com.test.remembered"))
+        guard let app = AppRules.appRule(forBundleID: "com.test.remembered",
+                                         normalizedName: "remembered app") else {
+            return XCTFail("remembered app missing")
+        }
+        AppLastUsedInputStore.set("test.layout", for: app.memoryKey)
+
+        AppRules.remove(app)
+
+        XCTAssertNil(AppLastUsedInputStore.sourceID(for: "com.test.remembered"))
     }
 
     func testAppWideLearningNeverOverridesBrowserOrConversationMemory() {
@@ -156,7 +193,9 @@ final class AppRulesTests: XCTestCase {
                                            name: "Visited App",
                                            sourceID: "test.initial-layout")
 
-        XCTAssertEqual(app?.rule, .source("test.initial-layout"))
+        XCTAssertEqual(app?.rule, .auto)
+        XCTAssertEqual(AppLastUsedInputStore.sourceID(for: "com.test.visited"),
+                       "test.initial-layout")
         XCTAssertTrue(app?.learnsAppPreference == true)
         XCTAssertTrue(RulesStore.customApps().contains { $0.bundleID == "com.test.visited" })
     }
@@ -172,7 +211,9 @@ final class AppRulesTests: XCTestCase {
                                            name: "Imported App",
                                            sourceID: "test.current-layout")
 
-        XCTAssertEqual(app?.rule, .source("test.current-layout"))
+        XCTAssertEqual(app?.rule, .auto)
+        XCTAssertEqual(AppLastUsedInputStore.sourceID(for: "com.test.imported"),
+                       "test.current-layout")
         XCTAssertTrue(RulesStore.customApps().contains { $0.bundleID == "com.test.imported" })
     }
 
@@ -186,7 +227,9 @@ final class AppRulesTests: XCTestCase {
                                                  name: "Visited App",
                                                  sourceID: "test.other-current-layout")
 
-        XCTAssertEqual(returning?.rule, .source("test.saved-layout"))
+        XCTAssertEqual(returning?.rule, .auto)
+        XCTAssertEqual(AppLastUsedInputStore.sourceID(for: "com.test.visited"),
+                       "test.saved-layout")
     }
 
     func testAutomaticVisitNeverAddsConversationProviderAsOrdinaryApp() {

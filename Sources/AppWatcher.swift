@@ -5,13 +5,21 @@ import AppKit
 // not forced here — they're handed to TabMemory (Phase 5) for per-tab memory.
 final class AppWatcher {
 
+    private enum LearningMode {
+        case undefined
+        case persistent
+    }
+
     private struct LearningTarget {
         let app: AppRule
         let pid: pid_t
+        let mode: LearningMode
     }
 
     private struct IgnoredProgrammaticChange {
         let sourceID: String
+        let pid: pid_t
+        let bundleID: String
         let expiresAt: TimeInterval
     }
 
@@ -86,41 +94,57 @@ final class AppWatcher {
             bundleID: app.bundleIdentifier,
             name: app.localizedName,
             sourceID: InputSourceManager.currentSourceID())
-        let rule = matchedApp?.rule
-        let isConversationApp = ConversationProviderRegistry.provider(forBundleID: app.bundleIdentifier) != nil
-
-        // An ordinary app participates only when it is present in AppRules
-        // (manually added, imported, or retained after learning). Browser/chat
-        // rows must never be learned app-wide.
-        if let matchedApp, matchedApp.learnsAppPreference {
-            learningTarget = LearningTarget(app: matchedApp, pid: app.processIdentifier)
-        } else {
-            learningTarget = nil
-        }
-
-        let decision = AppRouting.decide(rule: rule, isConversationApp: isConversationApp)
+        let providerExists = ConversationProviderRegistry.provider(forBundleID: app.bundleIdentifier) != nil
+        let rule = matchedApp?.rule ?? (providerExists ? .auto : nil)
+        let kind = matchedApp?.kind ?? (providerExists ? .conversation : nil)
+        let decision = AppRouting.decide(rule: rule, kind: kind)
         let bundleID = app.bundleIdentifier ?? "?"
         Diag.log(.appActivated(bundleID: bundleID))
         Diag.log(.routingDecision(bundleID: bundleID, decision: decision.diagKind))
 
         switch decision {
         case .force(let id):
-            Diag.log(.layoutSwitch(expected: id, applied: id))
+            learningTarget = nil
             onLeftBrowser?()                 // releases both auto-controllers
-            if InputSourceManager.currentSourceID() != id {
-                programmaticChangeToIgnore = IgnoredProgrammaticChange(
-                    sourceID: id,
-                    expiresAt: ProcessInfo.processInfo.systemUptime + 1.0)
+            apply(id, to: app)
+        case .rememberApp:
+            onLeftBrowser?()
+            guard let matchedApp else { learningTarget = nil; return }
+            learningTarget = LearningTarget(app: matchedApp, pid: app.processIdentifier,
+                                            mode: .persistent)
+            if let remembered = AppLastUsedInputStore.sourceID(for: matchedApp.memoryKey) {
+                apply(remembered, to: app)
+            } else if let current = InputSourceManager.currentSourceID() {
+                AppLastUsedInputStore.set(current, for: matchedApp.memoryKey)
             }
-            InputSourceManager.switchTo(sourceID: id)
-            SwitchStats.record(.appSwitch)
         case .conversation:
-            onConversationApp?(app)          // e.g. Teams → per-conversation
+            learningTarget = nil
+            onConversationApp?(app)
         case .browser:
-            onBrowserActivated?(app)         // browser → per-site memory
+            learningTarget = nil
+            onBrowserActivated?(app)
         case .leaveAsIs:
+            if let matchedApp, matchedApp.learnsAppPreference {
+                learningTarget = LearningTarget(app: matchedApp, pid: app.processIdentifier,
+                                                mode: .undefined)
+            } else {
+                learningTarget = nil
+            }
             onLeftBrowser?()                 // no rule → leave the input source as-is
         }
+    }
+
+    private func apply(_ sourceID: String, to app: NSRunningApplication) {
+        Diag.log(.layoutSwitch(expected: sourceID, applied: sourceID))
+        if InputSourceManager.currentSourceID() != sourceID {
+            programmaticChangeToIgnore = IgnoredProgrammaticChange(
+                sourceID: sourceID,
+                pid: app.processIdentifier,
+                bundleID: app.bundleIdentifier ?? "",
+                expiresAt: ProcessInfo.processInfo.systemUptime + 1.0)
+            InputSourceManager.switchTo(sourceID: sourceID)
+        }
+        SwitchStats.record(.appSwitch)
     }
 
     private func inputSourceChanged(sourceID: String?,
@@ -130,6 +154,8 @@ final class AppWatcher {
 
         if let ignored = programmaticChangeToIgnore,
            ignored.sourceID == sourceID,
+           ignored.pid == frontmostPID,
+           ignored.bundleID.caseInsensitiveCompare(frontmostBundleID ?? "") == .orderedSame,
            ProcessInfo.processInfo.systemUptime <= ignored.expiresAt {
             programmaticChangeToIgnore = nil
             return
@@ -143,7 +169,12 @@ final class AppWatcher {
               frontmostBundleID?.caseInsensitiveCompare(target.app.bundleID) == .orderedSame
         else { return }
 
-        AppRules.rememberSource(sourceID, for: target.app)
+        switch target.mode {
+        case .undefined:
+            AppRules.rememberSource(sourceID, for: target.app)
+        case .persistent:
+            AppLastUsedInputStore.set(sourceID, for: target.app.memoryKey)
+        }
     }
 }
 
@@ -152,6 +183,7 @@ private extension AppRouting.Decision {
     var diagKind: RoutingKind {
         switch self {
         case .force:       return .force
+        case .rememberApp: return .force
         case .conversation: return .conversation
         case .browser:     return .browser
         case .leaveAsIs:   return .leaveAsIs

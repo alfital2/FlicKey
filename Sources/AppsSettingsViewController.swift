@@ -156,11 +156,8 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
         }
 
         let footnote = NSTextField(wrappingLabelWithString:
-            "For ordinary apps, changing the input language makes it their preferred language. "
-            + "Not defined leaves it unchanged until then. AUTO learns and "
-            + "remembers automatically - per website "
-            + "for browsers, per conversation for chat apps. Pick a language instead to "
-            + "force it when moving between apps.")
+            "Always restores a fixed layout. Remember last used keeps changes across relaunches. "
+            + "Browser and chat memory is scoped per website or conversation.")
         footnote.font = .systemFont(ofSize: 11)
         footnote.textColor = .secondaryLabelColor
         listStack.addArrangedSubview(spacer(12))
@@ -360,20 +357,23 @@ private final class RuleRowView: NSView {
         let name = NSTextField(labelWithString: app.name)
         name.font = .systemFont(ofSize: 13)
 
-        for source in InputSourceCatalog.enabledSources() {
-            popup.addItem(withTitle: source.localizedName)
-            itemRules.append(.source(source.id))
-        }
+        let sources = InputSourceCatalog.enabledSources()
         switch app.kind {
         case .browser:
-            popup.addItem(withTitle: "Auto (per-site)")
+            popup.addItem(withTitle: "Remember per website")
             itemRules.append(.auto)
         case .conversation:
-            popup.addItem(withTitle: "Auto (per-conversation)")
+            popup.addItem(withTitle: "Remember per conversation")
             itemRules.append(.auto)
         case .normal:
-            popup.insertItem(withTitle: "Not defined", at: 0)
-            itemRules.insert(.undefined, at: 0)
+            popup.addItem(withTitle: "Not defined")
+            itemRules.append(.undefined)
+            popup.addItem(withTitle: "Remember last used")
+            itemRules.append(.auto)
+        }
+        for source in sources {
+            popup.addItem(withTitle: "Always: \(source.localizedName)")
+            itemRules.append(.source(source.id))
         }
         // The stored rule can reference an input source the user has since disabled,
         // so it may not be among the enabled sources listed above. Show it explicitly
@@ -412,12 +412,12 @@ private final class RuleRowView: NSView {
     private static func unavailableRuleTitle(_ rule: InputRule) -> String {
         switch rule {
         case .auto:
-            return "Auto"
+            return "Remember last used"
         case .undefined:
             return "Not defined"
         case .source(let id):
             let name = InputSourceCatalog.localizedName(for: id) ?? id
-            return "\(name) (not enabled)"
+            return "Always: \(name) (not enabled)"
         }
     }
 

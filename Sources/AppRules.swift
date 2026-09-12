@@ -1,10 +1,10 @@
 import AppKit
 
-// What input an app should use: a specific macOS input source, or AUTO
-// (browsers only — input is learned/applied per website at runtime).
+// What input an app should use: fixed, remembered persistently, or unmanaged.
+// AppKind supplies the memory scope.
 enum InputRule: Equatable {
-    case source(String) // input source ID, e.g. "com.apple.keylayout.Hebrew-PC"
-    case auto
+    case source(String)  // fixed input source ID, e.g. "com.apple.keylayout.Hebrew-PC"
+    case auto            // remember last used persistently (scope comes from AppKind)
     case undefined
 
     var sourceID: String? { if case .source(let id) = self { return id }; return nil }
@@ -16,6 +16,9 @@ enum InputRule: Equatable {
     // Persisted string form.
     static let autoToken = "__auto__"
     static let undefinedToken = "__undefined__"
+    // Build 57 briefly persisted this experimental mode. Treat its selected
+    // default as a fixed rule so upgrading testers never get a bogus source ID.
+    private static let retiredSessionPrefix = "__session__:"
     var storageValue: String {
         if isAuto { return Self.autoToken }
         if isUndefined { return Self.undefinedToken }
@@ -24,17 +27,21 @@ enum InputRule: Equatable {
     init?(storage: String) {
         if storage == Self.autoToken { self = .auto }
         else if storage == Self.undefinedToken { self = .undefined }
+        else if storage.hasPrefix(Self.retiredSessionPrefix) {
+            let id = String(storage.dropFirst(Self.retiredSessionPrefix.count))
+            guard !id.isEmpty else { return nil }
+            self = .source(id)
+        }
         else if !storage.isEmpty { self = .source(storage) }
         else { return nil }
     }
 }
 
 // How an app's input is managed:
-//   .normal       — a forced input source.
-//   .browser      — AUTO (per-site) by default; a forced source overrides it.
-//   .conversation — AUTO (per-conversation, via a ConversationProvider) by
-//                   default; a forced source overrides it.
-enum AppKind {
+//   .normal       — app-wide.
+//   .browser      — per website in a memory mode.
+//   .conversation — per conversation in a memory mode.
+enum AppKind: Equatable {
     case normal, browser, conversation
 }
 
@@ -53,6 +60,9 @@ struct AppRule {
     // them here would accidentally flatten those behaviors into one rule.
     var learnsAppPreference: Bool { kind == .normal }
     var matchKey: String { name.lowercased() }
+    var memoryKey: String {
+        bundleID.isEmpty ? matchKey : bundleID.lowercased()
+    }
 }
 
 // A user-added app, persisted in UserDefaults.
@@ -209,8 +219,7 @@ enum AppRules {
         return defaultRule
     }
 
-    // All apps the user can configure, sorted alphabetically. Browsers get an
-    // AUTO (per-site) option; other apps pick any one enabled input source.
+    // All apps the user can configure, sorted alphabetically.
     static var editable: [AppRule] {
         all.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
@@ -287,12 +296,20 @@ enum AppRules {
     }
 
     // Called for a real user input-source change while an ordinary app is
-    // active. The first change turns an imported `Not defined` row into a
-    // persistent app preference; subsequent changes replace that preference.
-    // Duplicate notifications (including our own forced switch) are ignored.
+    // active. An undefined row becomes "Remember last used"; an existing
+    // persistent rule updates its memory. Fixed and launch-session rules are
+    // handled by AppWatcher and never rewritten here.
     static func rememberSource(_ sourceID: String, for app: AppRule) {
-        guard app.learnsAppPreference, app.rule.sourceID != sourceID else { return }
-        setRule(.source(sourceID), for: app)
+        guard app.learnsAppPreference else { return }
+        switch app.rule {
+        case .undefined:
+            setRule(.auto, for: app)
+            AppLastUsedInputStore.set(sourceID, for: app.memoryKey)
+        case .auto:
+            AppLastUsedInputStore.set(sourceID, for: app.memoryKey)
+        case .source:
+            break
+        }
     }
 
     // Resolves the row AppWatcher should use for an activation. With automatic
@@ -324,7 +341,8 @@ enum AppRules {
 
         let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? normalized
         RulesStore.addCustomApp(CustomApp(name: displayName, bundleID: bundleID))
-        RulesStore.set(InputRule.source(sourceID).storageValue, forMatchKey: normalized)
+        RulesStore.set(InputRule.auto.storageValue, forMatchKey: normalized)
+        AppLastUsedInputStore.set(sourceID, for: bundleID.lowercased())
         NotificationCenter.default.post(name: .appRulesChanged, object: nil)
         return appRule(forBundleID: bundleID, normalizedName: normalized)
     }
@@ -355,6 +373,7 @@ enum AppRules {
     // Remove an app so it no longer follows any rule: custom apps are deleted,
     // built-ins are hidden (persisted) so they don't reappear.
     static func remove(_ app: AppRule) {
+        AppLastUsedInputStore.clear(app.memoryKey)
         if app.isCustom {
             RulesStore.removeCustomApp(matchKey: app.matchKey)
         } else {

@@ -189,9 +189,9 @@ final class GeneralSettingsViewController: NSViewController {
             name: .accessibilityTrustChanged, object: nil)
 
         #if DEBUG
-        let versionLabel = "FlicKey \(appShortVersion) Firefox (QA TEST BUILD — Unlocked)"
+        let versionLabel = "FlicKey \(appShortVersion) (QA TEST BUILD — Unlocked)"
         #else
-        let versionLabel = "FlicKey \(appShortVersion) Firefox"
+        let versionLabel = "FlicKey \(appShortVersion)"
         #endif
 
         let cards = [

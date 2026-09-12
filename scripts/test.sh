@@ -121,10 +121,20 @@ filter='Test Case .* (passed|failed)|Executed [0-9]+ tests|TEST (SUCCEEDED|FAILE
 run() {   # run <scheme> <args...>
   local scheme="$1"; shift
   local bundle="build/${scheme}.xcresult"; rm -rf "$bundle"
+  # Tests must run on clean Macs/VMs that do not have the developer's personal
+  # Apple Development certificate. Ad-hoc signing is sufficient for local
+  # XCTest execution; release scripts explicitly supply Developer ID signing.
+  local test_signing=(
+    CODE_SIGN_STYLE=Manual
+    CODE_SIGN_IDENTITY=-
+    DEVELOPMENT_TEAM=
+    PROVISIONING_PROFILE_SPECIFIER=
+    ENABLE_HARDENED_RUNTIME=NO
+  )
   # Show pass/fail + the live "STEP ▸" narration each test emits (cleaned to a
   # plain "▸ doing X"); also save it to the transcript file + an .xcresult bundle.
   xcodebuild test -project FlicKey.xcodeproj -scheme "$scheme" -destination 'platform=macOS' \
-    -resultBundlePath "$bundle" "$@" \
+    -resultBundlePath "$bundle" "${test_signing[@]}" "$@" \
     2>&1 | grep -iE "$filter" | sed -E 's/.*STEP ▸ /   ▸ /' | tee -a "$TRANSCRIPT"
   local s=${PIPESTATUS[0]}
   [ "$s" -ne 0 ] && overall=1

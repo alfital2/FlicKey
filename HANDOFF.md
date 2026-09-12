@@ -1,24 +1,28 @@
 ## Status
 
-`dev` is the official development line. It contains Firefox and other discovered-browser per-site memory, no hardcoded ordinary-app catalog, “Import all my apps,” and the optional “Remember language for apps I use” behavior. Accessibility-dependent features now monitor trust at startup and meaningful lifecycle events—without a timer—and pause or recover automatically when permission changes.
+`dev` now includes two explicit input behaviors: fixed and persistent last-used memory. Ordinary apps remember app-wide, browsers per website, and supported chat apps per conversation. Existing saved source choices migrate conservatively as fixed rules. Version 0.5.5 (build 58) removes the rejected reset-on-launch experiment and is running locally for QA.
 
 ## Recent changes
 
-- Added event-driven Accessibility trust checks on startup, app activation, wake, and session activation because macOS exposes a trust query but no permission-change notification.
-- Auto-fix, hotkeys, and focus watching now stop safely when Accessibility is revoked and restart automatically after trust returns.
-- Added an actionable Accessibility warning to the menu and an auto-fix status plus Settings button to General settings.
-- Track global keyboard-monitor creation failures separately and retry on the next lifecycle event rather than polling.
-- Bumped the local dev build to 0.5.4 (56); the full 511-test unit suite passes.
-- Diagnosed a host-only TCC mismatch caused by running an Apple Development build beside the installed Developer ID app; rebuilt the same source with the stable Developer ID identity and confirmed TCC grants it Accessibility.
+- Split fixed layout selection from learning: “Always” can no longer be overwritten by manual or automatic source changes.
+- Added persistent “Remember last used” for ordinary apps while retaining persistent per-website and per-conversation memory for browsers/chat apps.
+- Automatically discovered/learned ordinary apps now enter persistent memory mode instead of becoming ambiguous fixed rules.
+- Removed reset-on-launch and its session-memory implementation; any build 57 test setting safely becomes a fixed rule using its selected default.
+- Bumped the release to 0.5.5 (58); the full 517-test unit suite passes.
+- Packaged a unique universal Developer-ID-signed build 58 DMG; the exact mounted app passes strict nested signature checks for both architectures.
+- Added an upgrade-contract regression that seeds released-build preferences and proves explicit app rules, custom apps, hidden rows, site memory, and conversation memory survive migration unchanged.
+- Made both test runners override the developer-specific project identity with local ad-hoc signing, so unit/UI suites build on clean Macs and VMs without release-signing credentials; focused tests and the full UI target build pass with that override.
+- Added VM test entry points that put a small `xcodebuild` wrapper first on `PATH`; it forces ad-hoc signing and disables hardened runtime only for disposable test runners. This avoids missing-certificate, mixed-Team-ID, and VirtioFS-xcconfig parsing failures; a real UI smoke test passes. `test-vm2.sh` exists solely to bypass the guest's cached first wrapper filename.
 
 ## Open questions / blockers
 
-- The host build is Developer-ID-signed and valid, but it is an unpackaged test app rather than a notarized distribution DMG.
+- Manual QA of both modes is still required before merging the feature branch into `dev`.
+- True per-tab or per-document identity is not part of this change; browser memory remains per website.
 
 ## Next steps
 
-1. Revoke Accessibility, switch applications, and confirm the warning appears and auto-fix pauses.
-2. Restore Accessibility, switch back to FlicKey or another app, and confirm auto-fix recovers without relaunching; test with `akuo vnmc `.
-3. Repeat the permission and auto-fix checks in the UTM QA VM.
+1. Manually verify fixed and persistent modes on an ordinary app.
+2. Verify persistent per-website Firefox behavior and per-conversation Teams/Slack behavior.
+3. Prepare the notarized release only after QA approval.
 
-_Last updated: 2026-09-12 by Codex_
+_Last updated: 2026-09-12_

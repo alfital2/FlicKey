@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Append portable test-only settings to every xcodebuild call made by the
+# regular runner. Command-line settings win over the developer identity pinned
+# in the generated project, without relying on an xcconfig over VirtioFS.
+exec /usr/bin/xcodebuild "$@" \
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY=- \
+  DEVELOPMENT_TEAM= \
+  PROVISIONING_PROFILE_SPECIFIER= \
+  ENABLE_HARDENED_RUNTIME=NO

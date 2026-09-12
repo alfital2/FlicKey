@@ -36,6 +36,11 @@ xcodebuild test \
   -project FlicKey.xcodeproj \
   -scheme FlicKeyUITests \
   -destination 'platform=macOS' \
+  CODE_SIGN_STYLE=Manual \
+  CODE_SIGN_IDENTITY=- \
+  DEVELOPMENT_TEAM= \
+  PROVISIONING_PROFILE_SPECIFIER= \
+  ENABLE_HARDENED_RUNTIME=NO \
   -skip-testing:FlicKeyUITests/BrowserIntegrationUITests \
   -skip-testing:FlicKeyUITests/TeamsIntegrationUITests \
   -resultBundlePath "$RESULT_BUNDLE" \
