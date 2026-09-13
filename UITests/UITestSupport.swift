@@ -1,5 +1,6 @@
 import Foundation
 import Carbon
+import Network
 import XCTest
 
 // Narrate what a UI test is doing, so a screen-controlled run isn't a black box.
@@ -49,6 +50,14 @@ func currentInputSourceID() -> String {
     return sourceID(cur)
 }
 
+func inputSourceName(id: String) -> String? {
+    guard let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue() as? [TISInputSource],
+          let source = list.first(where: { sourceID($0) == id }),
+          let pointer = TISGetInputSourceProperty(source, kTISPropertyLocalizedName)
+    else { return nil }
+    return Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String
+}
+
 // Select a specific enabled keyboard input source by ID — simulates the user
 // switching layouts via the Input menu (fires the same TIS notification).
 func selectInputSource(id: String) {
@@ -83,6 +92,36 @@ func doubleTapShift() {
     tapShift()
     usleep(120_000)
     tapShift()
+}
+
+// Revert the most recent automatic correction.
+func doubleTapOption() {
+    func tapOption() {
+        let down = CGEvent(keyboardEventSource: nil, virtualKey: 58, keyDown: true)
+        down?.flags = .maskAlternate
+        down?.post(tap: .cghidEventTap)
+        usleep(40_000)
+        let up = CGEvent(keyboardEventSource: nil, virtualKey: 58, keyDown: false)
+        up?.flags = []
+        up?.post(tap: .cghidEventTap)
+    }
+    tapOption()
+    usleep(120_000)
+    tapOption()
+}
+
+// Send a physical shortcut independent of the active character layout. This is
+// important for browser shortcuts exercised while a remembered Hebrew/Russian
+// layout is active: XCUI's character-based typeKey("t") need not map to the
+// physical T key in that state.
+func postPhysicalShortcut(keyCode: CGKeyCode, flags: CGEventFlags) {
+    let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true)
+    down?.flags = flags
+    down?.post(tap: .cghidEventTap)
+    usleep(40_000)
+    let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
+    up?.flags = flags
+    up?.post(tap: .cghidEventTap)
 }
 
 // Two distinct enabled keyboard layouts to test a visible flip: a Latin one
@@ -122,4 +161,57 @@ func triggerFix(until condition: @escaping () -> Bool) -> Bool {
     step("  · fix didn't land, retrying ⇧⇧")
     doubleTapShift()
     return waitUntil(timeout: 6, condition)
+}
+
+// Tiny deterministic HTTP fixture for browser UI tests. `localhost` and the
+// loopback address are deliberately separate site-memory keys, while both stay
+// offline and avoid relying on wildcard-localhost DNS behavior in browsers.
+final class LocalWebServer {
+    private let listener: NWListener
+    private let queue: DispatchQueue
+    let port: UInt16
+
+    init() throws {
+        let worker = DispatchQueue(label: "com.talalfi.FlicKeyUITests.web")
+        queue = worker
+        listener = try NWListener(using: .tcp, on: .any)
+        let ready = DispatchSemaphore(value: 0)
+        var failure: Error?
+        listener.stateUpdateHandler = { state in
+            switch state {
+            case .ready: ready.signal()
+            case .failed(let error): failure = error; ready.signal()
+            default: break
+            }
+        }
+        listener.newConnectionHandler = { connection in
+            connection.start(queue: worker)
+            connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) {
+                data, _, _, _ in
+                let request = data.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                let title = request.contains("Host: 127.0.0.1") ? "FlicKey Site Two" : "FlicKey Site One"
+                let body = "<html><head><title>\(title)</title></head><body>\(title)</body></html>"
+                let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
+                connection.send(content: response.data(using: .utf8), completion: .contentProcessed { _ in
+                    connection.cancel()
+                })
+            }
+        }
+        listener.start(queue: queue)
+        guard ready.wait(timeout: .now() + 5) == .success else {
+            listener.cancel()
+            throw NSError(domain: "LocalWebServer", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "listener did not become ready"])
+        }
+        if let failure { listener.cancel(); throw failure }
+        guard let raw = listener.port?.rawValue else {
+            listener.cancel()
+            throw NSError(domain: "LocalWebServer", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "listener has no port"])
+        }
+        port = raw
+    }
+
+    deinit { listener.cancel() }
+    func url(_ host: String) -> String { "http://\(host):\(port)/" }
 }

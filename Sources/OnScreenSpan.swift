@@ -13,6 +13,19 @@ import Foundation
 // N words plus their trailing/interleaving spaces — however long autocorrect made
 // each word. This walks back from the caret over N (spaces, word) groups.
 enum OnScreenSpan {
+    // Shared by correction and undo. Keep the fallback decision here so tests
+    // exercise the same deletion limits that protect the user's preceding text.
+    static func deletion(run: String, beforeCaret: [Character]?)
+        -> (count: Int, fallback: SpanFallbackReason?) {
+        let tracked = run.count
+        guard let beforeCaret else { return (tracked, .axUnreadable) }
+        let measured = length(beforeCaret: beforeCaret, words: run.split(separator: " ").count)
+        guard measured <= tracked * 3 + 24 else {
+            return (min(tracked, beforeCaret.count), .spanOutOfRange)
+        }
+        return (measured, nil)
+    }
+
     static func length(beforeCaret chars: [Character], words: Int) -> Int {
         guard words > 0 else { return 0 }
         var i = chars.count

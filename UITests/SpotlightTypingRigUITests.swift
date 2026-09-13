@@ -94,9 +94,14 @@ final class SpotlightTypingRigUITests: XCTestCase {
     // passing test as a side effect of adding this one.
 
     private func openSpotlight() {
-        postKey(49, flags: .maskCommand)                       // ⌘Space
-        _ = spotlight.searchFields.firstMatch.waitForExistence(timeout: 3)
-        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        closeSpotlight()                                       // clear a prior test's overlay
+        RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        for _ in 0..<3 {
+            postKey(49, flags: .maskCommand)                   // ⌘Space
+            if waitUntil(timeout: 3, { self.fieldValue() != nil }) { return }
+            closeSpotlight()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.3))
+        }
     }
 
     private func closeSpotlight() { postKey(53, flags: []) }   // Esc

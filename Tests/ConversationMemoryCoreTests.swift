@@ -112,6 +112,35 @@ final class ConversationMemoryCoreTests: XCTestCase {
         XCTAssertTrue(saved.isEmpty, "the echo of our own apply must not be re-saved")
     }
 
+    func testStalePreApplyNotificationDoesNotOverwriteDestination() {
+        memory["Alex"] = "Hebrew"
+        liveSource = "English"
+        var clock = 0.0
+        let core = ConversationMemoryCore(
+            namespace: "teams",
+            lookup: { [unowned self] _, key in self.memory[key] },
+            store: { [unowned self] source, _, key in
+                self.memory[key] = source
+                self.saved.append("\(key)=\(source)")
+            },
+            // Model the real asynchronous switch: it has been requested, but
+            // currentSource still reports the old layout for a few milliseconds.
+            applySource: { [unowned self] source in self.applied.append(source) },
+            currentSource: { [unowned self] in self.liveSource },
+            now: { clock })
+
+        core.enter(key: "Alex")
+        clock = 0.03
+        core.inputChanged() // stale queued English notification
+        XCTAssertEqual(memory["Alex"], "Hebrew")
+        XCTAssertTrue(saved.isEmpty)
+
+        liveSource = "Hebrew"
+        clock = 0.05
+        core.inputChanged() // requested source finally becomes observable
+        XCTAssertTrue(saved.isEmpty)
+    }
+
     // THE fix for the reported "Teams never remembers" bug: a genuine change the
     // user makes immediately after switching chats is saved — no waiting period.
     func testGenuineChangeRightAfterSwitchIsSaved() {
@@ -124,13 +153,14 @@ final class ConversationMemoryCoreTests: XCTestCase {
         XCTAssertEqual(memory["Alex"], "English", "a real change right after enter must save")
     }
 
-    // The echo is one-shot: only the FIRST input-change after enter can be the
-    // echo. A genuine change to the same source later is still saved.
+    // Once the applied source has been observed, a genuine change away and back
+    // is saved normally.
     func testEchoIsOnlyIgnoredOnce() {
         memory["Alex"] = "Hebrew"
         let core = makeCore()
         core.enter(key: "Alex")                       // applies Hebrew, arms echo
-        liveSource = "English"; core.inputChanged()   // first event = real change → saved (echo consumed)
+        core.inputChanged()                            // observe applied Hebrew
+        liveSource = "English"; core.inputChanged()   // genuine change → saved
         liveSource = "Hebrew";  core.inputChanged()   // user deliberately goes back to Hebrew → saved
         XCTAssertEqual(memory["Alex"], "Hebrew")
         XCTAssertEqual(saved, ["Alex=English", "Alex=Hebrew"])

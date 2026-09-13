@@ -36,6 +36,8 @@ final class MemorySoakTests: XCTestCase {
             var refKey: String? = nil
             var refLastApplied: String? = nil
             var refLastAppliedAt: TimeInterval = 0
+            var refSourceBeforeApply: String? = nil
+            var refObservedAppliedSource = false
 
             var log: [String] = []
             let ops = rng.int(150..<500)
@@ -47,11 +49,14 @@ final class MemorySoakTests: XCTestCase {
                 switch rng.int(0..<100) {
                 case 0..<40:   // enter a (possibly new, possibly nil) conversation
                     let k = rng.pick(keys)
+                    let sourceBeforeEnter = currentSource
                     log.append("enter(\(k ?? "nil"))")
                     core.enter(key: k)
                     if k != refKey {
                         refKey = k
                         if let k, let src = store[k] {   // has remembered memory → apply
+                            refSourceBeforeApply = sourceBeforeEnter
+                            refObservedAppliedSource = refSourceBeforeApply == src
                             refLastApplied = src; refLastAppliedAt = vtime
                             expectApplied = (src, k)
                         }
@@ -63,9 +68,19 @@ final class MemorySoakTests: XCTestCase {
                     log.append("switch(\(src))@\(vtime)")
                     core.inputChanged()
                     if let key = refKey {
-                        let echo = (refLastApplied == src) && (vtime - refLastAppliedAt < echoWindow)
+                        let inEchoWindow = vtime - refLastAppliedAt < echoWindow
+                        var echo = false
+                        if inEchoWindow, refLastApplied == src {
+                            refObservedAppliedSource = true
+                            echo = true
+                        } else if inEchoWindow, !refObservedAppliedSource,
+                                  refSourceBeforeApply == src {
+                            echo = true
+                        }
                         if !echo {
                             refLastApplied = nil
+                            refSourceBeforeApply = nil
+                            refObservedAppliedSource = false
                             expectSaved = (src, key)
                         }
                     }
@@ -74,6 +89,7 @@ final class MemorySoakTests: XCTestCase {
                     log.append("reset")
                     core.reset()
                     refKey = nil; refLastApplied = nil
+                    refSourceBeforeApply = nil; refObservedAppliedSource = false
 
                 default:       // time passes
                     let dt = Double(rng.int(0..<2000)) / 1000.0

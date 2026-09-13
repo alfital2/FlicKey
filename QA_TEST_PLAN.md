@@ -4,7 +4,7 @@ Run as a manual tester. Mark each: ✅ Pass / ❌ Fail / ⏭️ Skipped.
 **Priority:** P1 = core/must-work · P2 = important · P3 = edge/polish.
 
 **Test environment to note before starting:** macOS version, enabled input
-sources (need at least English + Hebrew), conversion shortcut (default ⌥2),
+sources (need at least English + Hebrew), conversion shortcut (default ⇧⇧),
 whether macOS "Automatically switch to a document's input source" is OFF.
 
 ---
@@ -13,12 +13,12 @@ whether macOS "Automatically switch to a document's input source" is OFF.
 
 | ID | Scenario | Steps | Expected | Pri |
 |----|----------|-------|----------|-----|
-| A1 | EN→HE fix | In any text field type `akuo`, select it, press ⌥2 | Text becomes `שלום`; keyboard switches to Hebrew | P1 |
-| A2 | HE→EN fix | Type Hebrew-keyboard gibberish meant as English, select, ⌥2 | Becomes the intended English; keyboard → English | P1 |
-| A3 | Nothing selected | Place cursor in a field with text (no selection), press ⌥2 | Selects all, converts the whole field | P2 |
-| A4 | Empty field | Focus an empty field, press ⌥2 | "No text to convert" overlay; nothing crashes/changes | P2 |
+| A1 | EN→HE fix | In any text field type `akuo`, then double-tap Shift | Text becomes `שלום`; keyboard switches to Hebrew | P1 |
+| A2 | HE→EN fix | Type Hebrew-keyboard gibberish meant as English, then double-tap Shift | Becomes the intended English; keyboard → English | P1 |
+| A3 | Nothing selected | Place cursor in a field with existing text and invoke the configured conversion trigger | Selects all, converts the whole field | P2 |
+| A4 | Empty field | Focus an empty field and invoke the configured conversion trigger | "No text to convert" overlay; nothing crashes/changes | P2 |
 | A5 | Clipboard restored | Copy `HELLO` to clipboard, do a conversion elsewhere, then paste | Clipboard still contains `HELLO` (conversion didn't clobber it) | P1 |
-| A6 | No cascade on punctuation | Type a single ambiguous char (e.g. `w`), ⌥2, then ⌥2 again | Returns to original (`w`→`'`→`w`); does not keep mutating | P2 |
+| A6 | No cascade on punctuation | Type a single ambiguous char (e.g. `w`), ⇧⇧, then ⇧⇧ again | Returns to original (`w`→`'`→`w`); does not keep mutating | P2 |
 | A7 | Works with custom shortcut | Change shortcut (see F1), then repeat A1 with the new combo | Conversion fires on the new combo | P2 |
 | A8 | Fix inside different apps | Repeat A1 in TextEdit, Notes, a browser field, a chat app | Works consistently across apps | P2 |
 
@@ -92,8 +92,8 @@ whether macOS "Automatically switch to a document's input source" is OFF.
 | ID | Scenario | Steps | Expected | Pri |
 |----|----------|-------|----------|-----|
 | F1 | Record new shortcut | Settings→Shortcut→Record New Shortcut, press ⌃⌥F | Shows ⌃⌥F; pressing it now triggers the fix | P1 |
-| F2 | Old shortcut stops | After F1, press the old ⌥2 | ⌥2 no longer triggers the fix | P2 |
-| F3 | Reset to default | Click "Reset to ⌥2" | Shortcut returns to ⌥2; ⌥2 works again | P2 |
+| F2 | Old shortcut stops | After F1, double-tap Shift | ⇧⇧ no longer triggers the fix | P2 |
+| F3 | Reset to default | Click "Reset to ⇧⇧" | Shortcut returns to ⇧⇧; double-Shift works again | P2 |
 | F4 | Modifier required | Start recording, press a bare key (no modifier) | Rejected with a hint; not saved | P2 |
 | F5 | Esc cancels | Start recording, press Esc | Recording stops; shortcut unchanged | P3 |
 | F6 | Persists across restart | Set a custom shortcut, quit & relaunch FlicKey | Custom shortcut still active | P2 |
@@ -141,3 +141,50 @@ whether macOS "Automatically switch to a document's input source" is OFF.
 | J6 | Rapid everything | Stress: switch apps/tabs/chats quickly for ~30s | No crash, no stuck state; final language correct | P2 |
 | J7 | Clipboard managers | With Maccy/Paste running, do a conversion | The transient converted text is not captured (Concealed/Transient flags) | P3 |
 | J8 | Non-English Teams UI | (If available) Teams in another UI language | Per-conversation no-ops gracefully (English "Chat" label only) | P3 |
+
+
+
+
+• Yes—you remembered correctly. The repository contains:
+
+  - Tests/: 525 automated unit/replay tests
+  - UITests/: Settings, app switching, auto-fix, Firefox, Safari, Teams, Spotlight, menu bar, etc.
+  - scripts/test.sh: test runner
+
+  Important: the DMG alone cannot run these tests. The VM needs Xcode plus the source checkout at commit 72079c3. The automated UI tests build their own test-enabled
+  app; the signed DMG still needs the separate manual checklist.
+
+  From the source directory inside the VM:
+
+  # Complete unit suite
+  scripts/test.sh unit
+
+  # Standard UI suite
+  # Takes control of mouse and keyboard
+  scripts/test.sh ui
+
+  # Live Firefox integration
+  scripts/test.sh browser-ui-firefox
+
+  # Live auto-fix in TextEdit
+  scripts/test.sh fix-ui
+
+  # App routing and Apps-tab tests
+  scripts/test.sh apps
+
+  # Optional live Teams integration
+  scripts/test.sh teams-ui
+
+  Or:
+
+  scripts/test.sh all
+
+  all runs unit tests plus the standard UI suite, but deliberately excludes the live Firefox/Safari and Teams integrations because those are environment-dependent. Run
+  those separately afterward.
+
+  The complete VM test sequence should therefore be:
+
+  scripts/test.sh all
+  scripts/test.sh browser-ui-firefox
+  scripts/test.sh fix-ui
+  scripts/test.sh teams-ui

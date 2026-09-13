@@ -29,6 +29,18 @@ final class SettingsWindowController: NSWindowController {
             tabs.addTabViewItem(item)
         }
 
+        // UI tests can open a pane directly. Navigation itself is covered by
+        // SettingsUITests; content-focused tests should not depend on whether a
+        // particular macOS release places the last toolbar items in overflow.
+        if UITestMode.isActive,
+           let marker = ProcessInfo.processInfo.arguments.firstIndex(of: "-uiTestSettingsTab"),
+           ProcessInfo.processInfo.arguments.indices.contains(marker + 1),
+           let index = specs.firstIndex(where: {
+               $0.1 == ProcessInfo.processInfo.arguments[marker + 1]
+           }) {
+            tabs.selectedTabViewItemIndex = index
+        }
+
         let window = NSWindow(contentViewController: tabs)
         window.styleMask = [.titled, .closable, .miniaturizable]
         window.title = "General"
@@ -143,6 +155,8 @@ final class SettingsTabViewController: NSTabViewController {
 
 final class GeneralSettingsViewController: NSViewController {
 
+    private let uiTestAutoUpdateKey = "uiTestAutoUpdateEnabled"
+
     // Short marketing version (e.g. "0.4.5") for the footnote label.
     private var appShortVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
@@ -170,10 +184,12 @@ final class GeneralSettingsViewController: NSViewController {
 
         iconPopup.addItems(withTitles: MenuBarIconStyle.allCases.map { $0.displayName })
         iconPopup.target = self; iconPopup.action = #selector(pickIcon)
+        iconPopup.setAccessibilityIdentifier("menuBarIconPicker")
 
         let checkNow = NSButton(title: "Check for Updates Now",
                                 target: self, action: #selector(checkNow))
         checkNow.bezelStyle = .rounded
+        checkNow.setAccessibilityIdentifier("checkForUpdates")
 
         autoCorrectHealth.textColor = .systemOrange
         autoCorrectHealth.isHidden = true
@@ -188,11 +204,7 @@ final class GeneralSettingsViewController: NSViewController {
             self, selector: #selector(refreshAutoCorrectHealth),
             name: .accessibilityTrustChanged, object: nil)
 
-        #if DEBUG
-        let versionLabel = "FlicKey \(appShortVersion) (QA TEST BUILD — Unlocked)"
-        #else
         let versionLabel = "FlicKey \(appShortVersion)"
-        #endif
 
         let cards = [
             settingsCard([settingsRow("Launch FlicKey at login", launchSwitch)]),
@@ -204,6 +216,7 @@ final class GeneralSettingsViewController: NSViewController {
         let manageBlocked = NSButton(title: "Manage Blocked Words…",
                                      target: self, action: #selector(manageBlockedWords))
         manageBlocked.bezelStyle = .rounded
+        manageBlocked.setAccessibilityIdentifier("manageBlockedWords")
 
         let stack = NSStackView(views: [
             sectionHeader("Startup"), cards[0],
@@ -227,7 +240,11 @@ final class GeneralSettingsViewController: NSViewController {
     override func viewWillAppear() {
         super.viewWillAppear()
         launchSwitch.state = LaunchAtLogin.isEnabled ? .on : .off
-        autoUpdateSwitch.state = (UITestMode.isActive ? true : Updater.shared.automaticallyChecksForUpdates) ? .on : .off
+        let autoUpdates = UITestMode.isActive
+            ? (AppDefaults.store.object(forKey: uiTestAutoUpdateKey) == nil
+                ? true : AppDefaults.store.bool(forKey: uiTestAutoUpdateKey))
+            : Updater.shared.automaticallyChecksForUpdates
+        autoUpdateSwitch.state = autoUpdates ? .on : .off
         autoCorrectSwitch.state = AutoSwitchSettings.isEnabled ? .on : .off
         refreshAutoCorrectHealth()
         if let idx = MenuBarIconStyle.allCases.firstIndex(of: MenuBarIcon.style) {
@@ -243,8 +260,12 @@ final class GeneralSettingsViewController: NSViewController {
     }
 
     @objc private func toggleAutoUpdate() {
-        guard !UITestMode.isActive else { return }
-        Updater.shared.automaticallyChecksForUpdates = (autoUpdateSwitch.state == .on)
+        let enabled = autoUpdateSwitch.state == .on
+        if UITestMode.isActive {
+            AppDefaults.store.set(enabled, forKey: uiTestAutoUpdateKey)
+        } else {
+            Updater.shared.automaticallyChecksForUpdates = enabled
+        }
     }
 
     @objc private func toggleAutoCorrect() {

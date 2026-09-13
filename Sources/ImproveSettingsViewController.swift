@@ -25,6 +25,10 @@ final class ImproveSettingsViewController: NSViewController {
         recordCheckbox.target = self; recordCheckbox.action = #selector(toggleRecord)
         shareWordsCheckbox.target = self; shareWordsCheckbox.action = #selector(toggleShareWords)
         reportButton.target = self; reportButton.action = #selector(reportBug)
+        recordCheckbox.setAccessibilityIdentifier("diagnosticRecording")
+        shareWordsCheckbox.setAccessibilityIdentifier("shareBlockedWords")
+        reportButton.setAccessibilityIdentifier("reportBug")
+        installLabel.setAccessibilityIdentifier("diagnosticInstallID")
         reportButton.bezelStyle = .rounded
 
         let shareWordsBlurb = NSTextField(wrappingLabelWithString:

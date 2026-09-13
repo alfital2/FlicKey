@@ -63,4 +63,18 @@ final class MenuBarUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 8) { self.app.state == .notRunning },
                       "Quit should terminate FlicKey")
     }
+
+    func testStatusItemTracksTheLiveInputSource() throws {
+        guard let pair = twoEnabledLayouts() else {
+            throw XCTSkip("Needs two enabled keyboard layouts")
+        }
+        let item = app.statusItems["flickeyStatusItem"]
+        guard item.waitForExistence(timeout: 10) else {
+            throw XCTSkip("FlicKey status item is hidden by menu-bar overflow")
+        }
+        let latinValue = item.value as? String
+        selectInputSource(id: pair.other)
+        XCTAssertTrue(waitUntil(timeout: 5) { (item.value as? String) != latinValue },
+                      "the status item should update when the input source changes")
+    }
 }

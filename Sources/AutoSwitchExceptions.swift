@@ -14,13 +14,18 @@ import Foundation
 // without bound, and normalized (trim + lowercase) so case and spacing don't
 // fragment entries.
 final class AutoSwitchExceptions {
-    private let store: UserDefaults
+    private let injectedStore: UserDefaults?
+    private var store: UserDefaults { injectedStore ?? AppDefaults.store }
     private let blockThreshold: Int
     private let cap: Int
     private let key = "autoSwitchExceptions"
 
-    init(store: UserDefaults = AppDefaults.store, blockThreshold: Int = 2, cap: Int = 500) {
-        self.store = store
+    init(store: UserDefaults? = nil, blockThreshold: Int = 2, cap: Int = 500) {
+        // The live controller is constructed before applicationDidFinishLaunching,
+        // where UI tests select their isolated defaults suite. Resolve that store
+        // lazily unless a unit test explicitly injects one, otherwise the
+        // controller permanently captures .standard and reset cannot clear it.
+        self.injectedStore = store
         self.blockThreshold = max(1, blockThreshold)
         self.cap = cap
     }

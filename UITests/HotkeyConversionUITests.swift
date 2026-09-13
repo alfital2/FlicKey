@@ -72,6 +72,39 @@ final class HotkeyConversionUITests: XCTestCase {
                       "second fix should toggle back; field=\"\(textView.value as? String ?? "")\"")
     }
 
+    func testCustomShortcutReplacesOldTriggerAndPersists() throws {
+        step("Record ⌃⌥9 through Settings")
+        flickey.terminate()
+        flickey.launchArguments = ["-uiTestReset", "-uiTestOpenSettings"]
+        flickey.launch()
+        flickey.tab("Shortcut").click()
+        let current = flickey.staticTexts["currentShortcut"]
+        XCTAssertTrue(current.waitForExistence(timeout: 10))
+        flickey.buttons["recordShortcut"].click()
+        flickey.typeKey("9", modifierFlags: [.control, .option])
+        XCTAssertTrue(waitUntil(timeout: 4) { (current.value as? String) == "⌃⌥9" })
+        flickey.typeKey("w", modifierFlags: .command)
+
+        let textView = try freshDocument()
+        textView.typeText("akuo")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+
+        step("The old double-Shift trigger must no longer convert")
+        doubleTapShift()
+        XCTAssertFalse(waitUntil(timeout: 1.5) { (textView.value as? String) == "שלום" })
+
+        step("The recorded chord performs the conversion")
+        textEdit.typeKey("9", modifierFlags: [.control, .option])
+        XCTAssertTrue(waitUntil(timeout: 8) { (textView.value as? String) == "שלום" })
+
+        step("Relaunch and verify the custom trigger is retained")
+        flickey.terminate()
+        flickey.launchArguments = ["-uiTestPreserveState", "-uiTestOpenSettings"]
+        flickey.launch()
+        flickey.tab("Shortcut").click()
+        XCTAssertEqual(flickey.staticTexts["currentShortcut"].value as? String, "⌃⌥9")
+    }
+
     // MARK: - helpers
 
     // A focused, EMPTY TextEdit document. TextEdit restores previous-session

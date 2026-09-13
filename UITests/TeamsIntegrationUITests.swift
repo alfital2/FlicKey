@@ -92,11 +92,13 @@ final class TeamsIntegrationUITests: XCTestCase {
 
     // QA A8 (live, and visibly so): the wrong-layout FIX works inside Teams.
     // Types gibberish into the compose box, double-taps Shift, and FlicKey
-    // converts it in place — proven by the layout switching — then SENDS it,
-    // so the converted message lands in the chat as a visible artifact.
-    func testConversionInsideTeamsComposeAndSend() throws {
+    // converts it in place. It never sends: compatibility testing must not
+    // create messages in a real account.
+    func testConversionInsideTeamsComposeWithoutSending() throws {
         _ = try waitForOpenChat()
-        focusCompose()
+        guard let compose = focusCompose() else {
+            throw XCTSkip("Teams compose field is not readable; refusing to type blind")
+        }
 
         step("Type wrong-layout gibberish 'akuo' into the compose box")
         forceLatinInputSource()
@@ -109,52 +111,62 @@ final class TeamsIntegrationUITests: XCTestCase {
         // converted language.
         XCTAssertTrue(waitForSource(other, 15),
                       "the fix should fire and switch the layout to \(other); current=\(currentInputSourceID())")
-
-        step("Send the converted message (visible proof in the chat)")
-        pause(1.0)   // let the retype finish
-        teams.typeKey(.return, modifierFlags: [])
-        pause(1.0)
+        XCTAssertTrue(waitUntil(timeout: 8) {
+            (compose.value as? String)?.contains("שלום") == true
+        }, "the compose field itself should contain the converted text")
+        // Clear the unsent draft with the physical A key. Character-based
+        // typeKey("a") is layout-dependent and can miss ⌘A while Hebrew is
+        // active, leaving test text persisted in Teams drafts.
+        compose.click()
+        postPhysicalShortcut(keyCode: 0, flags: .maskCommand)
+        teams.typeKey(.delete, modifierFlags: [])
+        XCTAssertTrue(waitUntil(timeout: 5) {
+            let value = (compose.value as? String) ?? ""
+            return !value.contains("שלום") && !value.lowercased().contains("akuo")
+        }, "the non-sent Teams draft must be cleared before the test exits")
     }
 
     // QA D3, the full per-person story, visibly: teach two chats two different
     // languages, then hop between them and watch the keyboard follow — and
-    // post a message into each chat saying what FlicKey just did.
+    // without posting anything into either chat.
     //
-    private static let chatA = ProcessInfo.processInfo.environment["TEAMS_CHAT_A"] ?? "Dana Bloom"
-    private static let chatB = ProcessInfo.processInfo.environment["TEAMS_CHAT_B"] ?? "noa nir"
+    private static let chatA = ProcessInfo.processInfo.environment["TEAMS_CHAT_A"]
+    private static let chatB = ProcessInfo.processInfo.environment["TEAMS_CHAT_B"]
 
     // The two test contacts are configurable so the suite runs against any Teams
     // tenant: set TEST_RUNNER_TEAMS_CHAT_A / TEST_RUNNER_TEAMS_CHAT_B when invoking
     // xcodebuild (the TEST_RUNNER_ prefix forwards them into this process). The
-    // defaults are fictional placeholders (Latin names match reliably in Teams'
-    // AX tree; chat B also exercises tenant-tag
-    // stripping live). Skips if either chat can't be opened.
+    // No names are baked into the repository. Skips with an actionable message
+    // if the caller did not provide two distinct chats or either cannot open.
     func testTwoChatsTwoLanguagesFollowTheUser() throws {
         _ = try waitForOpenChat()   // make sure the Chat section is up
+        guard let chatA = Self.chatA?.trimmingCharacters(in: .whitespacesAndNewlines),
+              let chatB = Self.chatB?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !chatA.isEmpty, !chatB.isEmpty, chatA != chatB else {
+            throw XCTSkip("Set two distinct TEAMS_CHAT_A / TEAMS_CHAT_B display names")
+        }
 
-        step("Open '\(Self.chatA)' and pick \(other) — FlicKey learns it for this chat")
-        try openChat(named: Self.chatA)
+        step("Open '\(chatA)' and pick \(other) — FlicKey learns it for this chat")
+        try openChat(named: chatA)
         pause(1.2)                          // let FlicKey enter; clear the grace window
         selectInputSource(id: other)
         pause(1.0)                          // let the learn land
 
-        step("Open '\(Self.chatB)' and pick \(latin) — learned for THIS chat")
-        try openChat(named: Self.chatB)
+        step("Open '\(chatB)' and pick \(latin) — learned for THIS chat")
+        try openChat(named: chatB)
         pause(1.2)
         selectInputSource(id: latin)
         pause(1.0)
 
-        step("Back to '\(Self.chatA)' → keyboard should flip to \(other) on its own")
-        try openChat(named: Self.chatA)
+        step("Back to '\(chatA)' → keyboard should flip to \(other) on its own")
+        try openChat(named: chatA)
         XCTAssertTrue(waitForSource(other, 15),
-                      "returning to \(Self.chatA) should restore \(other); current=\(currentInputSourceID())")
-        sendMessage("FlicKey ✓ עברית שוחזרה אוטומטית לצ'אט הזה")
+                      "returning to \(chatA) should restore \(other); current=\(currentInputSourceID())")
 
-        step("Back to '\(Self.chatB)' → keyboard should flip to \(latin) on its own")
-        try openChat(named: Self.chatB)
+        step("Back to '\(chatB)' → keyboard should flip to \(latin) on its own")
+        try openChat(named: chatB)
         XCTAssertTrue(waitForSource(latin, 15),
-                      "returning to \(Self.chatB) should restore \(latin); current=\(currentInputSourceID())")
-        sendMessage("FlicKey ✓ auto-switched back to English for this chat")
+                      "returning to \(chatB) should restore \(latin); current=\(currentInputSourceID())")
     }
 
     // MARK: - Chromium accessibility
@@ -220,8 +232,8 @@ final class TeamsIntegrationUITests: XCTestCase {
     }
 
     // The clickable chat-list row for a contact. Rows are interactive elements
-    // (button/cell/link) whose compound label CONTAINS the name ("Dana Bloom
-    // You: … 09/06"); a bare static text is the last resort.
+    // (button/cell/link) whose compound label contains the display name and
+    // message/date metadata; a bare static text is the last resort.
     private func chatListEntry(named name: String) -> XCUIElement? {
         let labelled = NSPredicate(format: "label CONTAINS %@", name)
         let candidates = [
@@ -280,21 +292,16 @@ final class TeamsIntegrationUITests: XCTestCase {
 
     // Put focus in the compose box. When it isn't findable in the AX tree,
     // type blind — Teams places focus in compose after opening a chat.
-    private func focusCompose() {
+    @discardableResult
+    private func focusCompose() -> XCUIElement? {
         if let compose = composeBox() {
             compose.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).click()
+            pause(0.5)
+            return compose
         } else {
-            step("  · compose box not in the AX tree — typing blind (focus lands there by default)")
+            step("  · compose box not in the AX tree")
+            return nil
         }
-        pause(0.5)
-    }
-
-    // Type + send a message in the open chat — the visible artifact of the run.
-    private func sendMessage(_ text: String) {
-        focusCompose()
-        teams.typeText(text)
-        teams.typeKey(.return, modifierFlags: [])
-        pause(0.8)
     }
 
     // MARK: - misc

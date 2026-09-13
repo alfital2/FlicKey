@@ -4,9 +4,39 @@ set -euo pipefail
 # Append portable test-only settings to every xcodebuild call made by the
 # regular runner. Command-line settings win over the developer identity pinned
 # in the generated project, without relying on an xcconfig over VirtioFS.
-exec /usr/bin/xcodebuild "$@" \
-  CODE_SIGN_STYLE=Manual \
-  CODE_SIGN_IDENTITY=- \
-  DEVELOPMENT_TEAM= \
-  PROVISIONING_PROFILE_SPECIFIER= \
-  ENABLE_HARDENED_RUNTIME=NO
+if [[ -n "${FLICKEY_TEST_DERIVED_DATA:-}" ]]; then
+  set -- "$@" -derivedDataPath "$FLICKEY_TEST_DERIVED_DATA"
+fi
+
+signing=(CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM=
+  PROVISIONING_PROFILE_SPECIFIER= ENABLE_HARDENED_RUNTIME=NO)
+
+# Ad-hoc signatures get a new designated CDHash whenever sources change. Build
+# first, refresh the VM's TCC rows for those exact products, then test without
+# rebuilding so Tahoe never presents an Accessibility dialog.
+is_ui=0
+is_test=0
+for arg in "$@"; do
+  [[ "$arg" == FlicKeyUITests ]] && is_ui=1
+  [[ "$arg" == test ]] && is_test=1
+done
+if [[ "$is_ui" == 1 && "$is_test" == 1 && -f /Users/admin/.flickey-test-vm ]]; then
+  build_args=()
+  skip_next=0
+  for arg in "$@"; do
+    if [[ "$skip_next" == 1 ]]; then skip_next=0; continue; fi
+    if [[ "$arg" == -resultBundlePath ]]; then skip_next=1; continue; fi
+    [[ "$arg" == test ]] && arg=build-for-testing
+    build_args+=("$arg")
+  done
+  /usr/bin/xcodebuild "${build_args[@]}" "${signing[@]}"
+  "$(dirname "$0")/../tart-grant-accessibility.sh"
+  test_args=()
+  for arg in "$@"; do
+    [[ "$arg" == test ]] && arg=test-without-building
+    test_args+=("$arg")
+  done
+  exec /usr/bin/xcodebuild "${test_args[@]}" "${signing[@]}"
+fi
+
+exec /usr/bin/xcodebuild "$@" "${signing[@]}"

@@ -5,6 +5,7 @@
 # Usage:  scripts/test.sh <component>
 #
 # Components:
+#   smoke        one fast Settings launch test
 #   browser      per-site browser memory + URL parsing + browser routing
 #   browser-ui   LIVE: drives real Safari, asserts the keyboard flips per site
 #                (EXPERIMENTAL/FLAKY — Safari session-restore + address-bar timing;
@@ -19,11 +20,11 @@
 #   conversion   wrong-layout fix (layout conversion / round-trips)
 #   fix-ui       LIVE: types gibberish in TextEdit, ⇧⇧, asserts it converts
 #                (part of the default UI run too)
+#   spotlight-ui LIVE: validates physical typing and conversion in Spotlight
 #   core         the shared decision engine
 #   routing      app-activation routing + app rules
 #   apps         app rules + the Apps-tab add/remove UI  (UI → controls screen)
 #   shortcut     shortcut building/persistence + recorder UI  (UI → controls screen)
-#   updates      update version check
 #   input        input source catalog/manager
 #   support      trial/license logic + the Support tab UI  (UI → controls screen)
 #   menubar      the status-item menu  (UI → controls screen)
@@ -52,6 +53,8 @@ WHOLE_UNIT=0   # run the entire unit scheme
 WHOLE_UI=0     # run the entire UI scheme
 
 case "$COMPONENT" in
+  smoke)
+    u SettingsUITests/testSettingsWindowOpensWithTabs ;;
   browser)
     t SiteMemoryStoreTests; t BrowserURLReaderTests; t BrowserCatalogTests
     t AppRulesTests/testBrowsersDefaultToAuto
@@ -67,13 +70,16 @@ case "$COMPONENT" in
   teams)
     t TeamsConversationProviderTests; t ContextMemoryStoreTests
     t SessionReplayTests/testRealTeamsSession_flapAndNonConversationViewsDoNotCorruptMemory
-    t SessionReplayTests/testTeamsFastSwitch_staleInputChangeIsNotSavedUnderTheNewChat ;;
+    t SessionReplayTests/testTeamsSwitchThenSet_savesForTheNewChat
+    t SessionReplayTests/testTeamsReturn_reappliesWithoutClobbering ;;
   teams-ui)
     u TeamsIntegrationUITests ;;   # LIVE: drives real Teams, controls screen
   conversion|fix)
     t ConversionEngineTests; t LayoutConverterTests; t RoundTripTests ;;
   fix-ui)
     u HotkeyConversionUITests ;;   # LIVE: the ⇧⇧ fix in TextEdit (controls screen)
+  spotlight-ui)
+    u SpotlightTypingRigUITests; u SpotlightConversionUITests ;;
   core)
     t ConversationMemoryCoreTests ;;
   routing)
@@ -87,8 +93,6 @@ case "$COMPONENT" in
     t ShortcutTests
     u FunctionalUITests/testRecordThenResetShortcut
     u FunctionalUITests/testBareKeyDuringRecordingIsRejected ;;
-  updates)
-    t UpdateCheckerTests ;;
   input)
     t InputSourceTests ;;
   support)
@@ -106,7 +110,7 @@ case "$COMPONENT" in
     WHOLE_UNIT=1; WHOLE_UI=1 ;;
   *)
     echo "Unknown component: '$COMPONENT'"
-    echo "Try: browser browser-ui browser-ui-firefox teams conversion core routing apps shortcut updates input support menubar settings ui unit all"
+    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
     exit 2 ;;
 esac
 
@@ -133,11 +137,17 @@ run() {   # run <scheme> <args...>
   )
   # Show pass/fail + the live "STEP ▸" narration each test emits (cleaned to a
   # plain "▸ doing X"); also save it to the transcript file + an .xcresult bundle.
+  local run_log="build/${scheme}.log"
   xcodebuild test -project FlicKey.xcodeproj -scheme "$scheme" -destination 'platform=macOS' \
     -resultBundlePath "$bundle" "${test_signing[@]}" "$@" \
-    2>&1 | grep -iE "$filter" | sed -E 's/.*STEP ▸ /   ▸ /' | tee -a "$TRANSCRIPT"
+    2>&1 | tee "$run_log" | grep -iE "$filter|Test Case .* skipped" | sed -E 's/.*STEP ▸ /   ▸ /' | tee -a "$TRANSCRIPT"
   local s=${PIPESTATUS[0]}
   [ "$s" -ne 0 ] && overall=1
+  if [[ "$scheme" == FlicKeyUITests && "${FLICKEY_REQUIRE_NO_UI_SKIPS:-0}" == 1 ]] \
+     && grep -qE 'Test Case .* skipped|Test skipped' "$run_log"; then
+    echo "error: provisioned UI suite skipped a test" | tee -a "$TRANSCRIPT"
+    overall=1
+  fi
   return 0
 }
 

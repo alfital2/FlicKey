@@ -23,11 +23,13 @@ final class SettingsUITests: XCTestCase {
     // button depending on macOS version — try each.
 
     func testSettingsWindowOpensWithTabs() {
-        step("Open Settings — expect General / Sound / Shortcut / Apps / Support tabs")
+        step("Open Settings — expect every current settings tab")
         XCTAssertTrue(app.tab("General").waitForExistence(timeout: 10), "General tab should appear")
         XCTAssertTrue(app.tab("Sound").exists, "Sound tab should exist")
         XCTAssertTrue(app.tab("Shortcut").exists, "Shortcut tab should exist")
         XCTAssertTrue(app.tab("Apps").exists, "Apps tab should exist")
+        XCTAssertTrue(app.tab("0").exists, "fresh stats tab should show total 0")
+        XCTAssertTrue(app.tab("Improve").exists, "Improve tab should exist")
         XCTAssertTrue(app.tab("Support").exists, "Support tab should exist")
     }
 
@@ -41,6 +43,9 @@ final class SettingsUITests: XCTestCase {
         step("General tab — check Launch-at-login + update controls")
         XCTAssertTrue(control("launchAtLoginSwitch").waitForExistence(timeout: 10))
         XCTAssertTrue(control("autoUpdateSwitch").exists)
+        XCTAssertTrue(control("autoCorrectSwitch").exists)
+        XCTAssertTrue(app.popUpButtons["menuBarIconPicker"].exists)
+        XCTAssertTrue(app.buttons["manageBlockedWords"].exists)
         XCTAssertTrue(app.buttons["Check for Updates Now"].exists)
     }
 
@@ -171,6 +176,53 @@ final class SettingsUITests: XCTestCase {
         let after = toggle.value as? Int
         XCTAssertNotEqual(before, after, "toggling should flip the switch state")
         toggle.click()   // restore
+    }
+
+    func testImportantPreferencesPersistAcrossRelaunch() {
+        step("Set auto-switch, auto-update, and a menu-bar icon style")
+        let autoSwitch = control("autoCorrectSwitch")
+        XCTAssertTrue(autoSwitch.waitForExistence(timeout: 10))
+        XCTAssertEqual(autoSwitch.value as? Int, 0)
+        autoSwitch.click()
+
+        let autoUpdate = control("autoUpdateSwitch")
+        XCTAssertEqual(autoUpdate.value as? Int, 1)
+        autoUpdate.click()
+
+        let icon = app.popUpButtons["menuBarIconPicker"]
+        XCTAssertTrue(icon.exists)
+        icon.click()
+        app.menuItems["Monochrome"].click()
+
+        step("Relaunch against the same isolated store")
+        app.terminate()
+        app.launchArguments = ["-uiTestOpenSettings", "-uiTestPreserveState"]
+        app.launch()
+        XCTAssertEqual(control("autoCorrectSwitch").value as? Int, 1,
+                       "auto-switch setting should survive relaunch")
+        XCTAssertEqual(control("autoUpdateSwitch").value as? Int, 0,
+                       "auto-update setting should survive relaunch")
+        XCTAssertEqual(app.popUpButtons["menuBarIconPicker"].value as? String, "Monochrome",
+                       "menu-bar icon style should survive relaunch")
+    }
+
+    func testStatsAndImproveTabsExposeWorkingControls() {
+        step("Stats — fresh isolated total and milestone preference")
+        app.tab("0").click()
+        XCTAssertEqual(app.staticTexts["switchStatsTotal"].value as? String, "0")
+        XCTAssertTrue(control("disableStatsNags").exists)
+
+        step("Improve — diagnostics opt-in gates bug reporting")
+        app.tab("Improve").click()
+        let recording = control("diagnosticRecording")
+        let report = app.buttons["reportBug"]
+        XCTAssertTrue(recording.waitForExistence(timeout: 5))
+        XCTAssertFalse(report.isEnabled, "reporting starts disabled while recording is off")
+        recording.click()
+        XCTAssertTrue(waitUntil(timeout: 3) { report.isEnabled },
+                      "opting into diagnostics should enable Report a Bug")
+        XCTAssertTrue(control("shareBlockedWords").exists)
+        XCTAssertTrue(app.staticTexts["diagnosticInstallID"].exists)
     }
 
     func testCmdWClosesTheWindow() {

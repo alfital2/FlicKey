@@ -14,7 +14,8 @@ final class SupportUITests: XCTestCase {
         continueAfterFailure = false
         forceLatinInputSource()
         app = XCUIApplication()
-        app.launchArguments = ["-uiTestOpenSettings", "-uiTestReset"]
+        app.launchArguments = ["-uiTestOpenSettings", "-uiTestReset",
+                               "-uiTestSettingsTab", "Support"]
         app.launch()
     }
 
@@ -24,16 +25,15 @@ final class SupportUITests: XCTestCase {
 
 
     private func openSupportTab() {
-        let support = app.tab("Support")
-        XCTAssertTrue(support.waitForExistence(timeout: 10), "Support tab should exist")
-        support.click()
+        XCTAssertTrue(app.windows["Support"].waitForExistence(timeout: 10),
+                      "Settings should open directly on Support")
     }
 
     // The isolated, freshly-reset trial must begin with all 30 days left.
     func testFreshTrialStatusIsShown() {
         step("Support tab — expect the fresh-trial status line")
         openSupportTab()
-        let status = app.staticTexts["licenseStatus"]
+        let status = app.descendants(matching: .any).matching(identifier: "licenseStatus").firstMatch
         XCTAssertTrue(status.waitForExistence(timeout: 10), "status line should exist")
         XCTAssertEqual(status.value as? String, "Free trial - 30 days left.",
                        "isolated UI-test trial should always start with 30 days left")
@@ -43,7 +43,8 @@ final class SupportUITests: XCTestCase {
     func testUnlicensedStateShowsEntryAndSupportControls() {
         step("Support tab — unlicensed: key field, Activate, Support; no Remove")
         openSupportTab()
-        XCTAssertTrue(app.textFields["licenseKeyField"].waitForExistence(timeout: 10),
+        XCTAssertTrue(app.descendants(matching: .any).matching(identifier: "licenseKeyField").firstMatch
+            .waitForExistence(timeout: 10),
                       "license key field should be visible when unlicensed")
         XCTAssertTrue(app.buttons["activateLicense"].exists, "Activate should be visible")
         XCTAssertTrue(app.buttons["buyLicense"].exists, "buy button should be visible")
@@ -67,7 +68,7 @@ final class SupportUITests: XCTestCase {
 
         // The status line must settle back to the trial text, and Activate
         // must be re-enabled for another attempt.
-        let status = app.staticTexts["licenseStatus"]
+        let status = app.descendants(matching: .any).matching(identifier: "licenseStatus").firstMatch
         XCTAssertTrue(waitUntil(timeout: 4) {
             (status.value as? String)?.hasPrefix("Free trial") == true
         }, "status should return to the trial line after the failed attempt")

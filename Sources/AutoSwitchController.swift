@@ -432,19 +432,12 @@ final class AutoSwitchController {
     // count — both logged to the shipping trail, since the fallback path is the
     // one place a text-service mutation is not compensated (QA F5).
     private func onScreenDeleteCount(for run: String) -> (count: Int, before: [Character]?) {
-        let tracked = run.count
-        guard let before = AXTextEditor.focusedTextBeforeCaret() else {
-            Diag.log(.autoSwitchSpanFallback(reason: .axUnreadable))
-            return (tracked, nil)
+        let before = AXTextEditor.focusedTextBeforeCaret()
+        let deletion = OnScreenSpan.deletion(run: run, beforeCaret: before)
+        if let reason = deletion.fallback {
+            Diag.log(.autoSwitchSpanFallback(reason: reason))
         }
-        let words = run.split(separator: " ").count
-        let onScreen = OnScreenSpan.length(beforeCaret: before, words: words)
-        // Anti-runaway cap: a stale/misplaced read can't wipe unrelated text.
-        guard onScreen <= tracked * 3 + 24 else {
-            Diag.log(.autoSwitchSpanFallback(reason: .spanOutOfRange))
-            return (min(tracked, before.count), before)
-        }
-        return (onScreen, before)
+        return (deletion.count, before)
     }
 
     // MARK: - Synthetic edit

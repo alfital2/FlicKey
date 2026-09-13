@@ -52,6 +52,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
             target: self,
             action: #selector(importAllChanged(_:)))
         importAll.state = AppRules.importsAllApps ? .on : .off
+        importAll.setAccessibilityIdentifier("importAllApps")
         importAllCheckbox = importAll
 
         let rememberVisited = NSButton(
@@ -59,6 +60,7 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
             target: self,
             action: #selector(rememberVisitedChanged(_:)))
         rememberVisited.state = AppRules.remembersVisitedApps ? .on : .off
+        rememberVisited.setAccessibilityIdentifier("rememberVisitedApps")
         rememberVisitedCheckbox = rememberVisited
 
         let search = NSTextField()
@@ -69,12 +71,14 @@ final class AppsSettingsViewController: NSViewController, NSTextFieldDelegate {
         search.bezelStyle = .roundedBezel
         search.target = self
         search.action = #selector(addByName(_:))
+        search.setAccessibilityIdentifier("addAppByName")
 
         let browse = NSButton(image: NSImage(systemSymbolName: "plus",
                                              accessibilityDescription: "Browse")!,
                               target: self, action: #selector(browseForApp))
         browse.bezelStyle = .rounded
         browse.toolTip = "Choose an app in Finder"
+        browse.setAccessibilityIdentifier("browseForApp")
         browse.setContentHuggingPriority(.required, for: .horizontal)
 
         let addBar = NSStackView(views: [search, browse])
@@ -356,6 +360,7 @@ private final class RuleRowView: NSView {
 
         let name = NSTextField(labelWithString: app.name)
         name.font = .systemFont(ofSize: 13)
+        name.setAccessibilityIdentifier("appRuleName.\(app.name)")
 
         let sources = InputSourceCatalog.enabledSources()
         switch app.kind {
@@ -388,6 +393,7 @@ private final class RuleRowView: NSView {
         }
         popup.target = self
         popup.action = #selector(ruleChanged)
+        popup.setAccessibilityIdentifier("appRule.\(app.name)")
         popup.setContentHuggingPriority(.required, for: .horizontal)
 
         let stack = NSStackView(views: [icon, name, NSView(), popup])

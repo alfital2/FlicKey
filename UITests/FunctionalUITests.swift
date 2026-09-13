@@ -45,6 +45,48 @@ final class FunctionalUITests: XCTestCase {
                        "Calculator row should be gone after removal")
     }
 
+    // The complete user story: configure through Settings, observe the real
+    // app switch, remove the rule, and prove the app is unmanaged again.
+    func testAppRuleFullLifecycleAffectsTheRealApp() throws {
+        guard let pair = twoEnabledLayouts(), let otherName = inputSourceName(id: pair.other) else {
+            throw XCTSkip("Needs two enabled keyboard layouts")
+        }
+        let calculator = XCUIApplication(bundleIdentifier: "com.apple.calculator")
+        defer { calculator.terminate(); forceLatinInputSource() }
+
+        app.tab("Apps").click()
+        let field = app.textFields["addAppByName"]
+        XCTAssertTrue(field.waitForExistence(timeout: 10))
+        field.click(); field.typeText("Calculator\r")
+
+        let popup = app.popUpButtons["appRule.Calculator"]
+        XCTAssertTrue(popup.waitForExistence(timeout: 5), "Calculator should expose its rule picker")
+        popup.click()
+        let forced = app.menuItems["Always: \(otherName)"]
+        XCTAssertTrue(forced.waitForExistence(timeout: 3))
+        forced.click()
+
+        step("Activate Calculator — the Settings choice should take effect")
+        calculator.launch()
+        calculator.activate()
+        XCTAssertTrue(waitForSource(pair.other, 10),
+                      "Calculator should use the layout selected through Settings")
+
+        step("Remove Calculator, then prove it no longer forces a layout")
+        app.activate()
+        let row = app.staticTexts["appRuleName.Calculator"]
+        XCTAssertTrue(row.waitForExistence(timeout: 5))
+        row.rightClick()
+        app.menuItems["Remove Calculator"].click()
+        XCTAssertFalse(popup.waitForExistence(timeout: 3))
+
+        forceLatinInputSource()
+        calculator.activate()
+        RunLoop.current.run(until: Date().addingTimeInterval(2.5))
+        XCTAssertEqual(currentInputSourceID(), pair.latin,
+                       "after removal Calculator must leave the user's layout unchanged")
+    }
+
     // QA E6: adding an already-listed app shows a notice and doesn't duplicate.
     func testAddingDuplicateIsRejected() {
         step("Add 'Calculator' twice — the duplicate should be rejected")
@@ -81,8 +123,15 @@ final class FunctionalUITests: XCTestCase {
                       "recording should change the displayed shortcut")
 
         app.buttons["resetShortcut"].click()
-        XCTAssertTrue(waitUntil(timeout: 4) { (current.value as? String) == "⇧⇧" },
+        // Re-resolve the element: AppKit updates this label in place, while an
+        // XCUIElement captured before the recorder's refresh can retain a stale
+        // accessibility snapshot after the second state change.
+        XCTAssertTrue(waitUntil(timeout: 4) {
+            (app.staticTexts["currentShortcut"].value as? String) == "⇧⇧"
+        },
                       "reset should restore the default ⇧⇧")
+        XCTAssertEqual(app.radioButtons["triggerDoubleShift"].value as? Int, 1,
+                       "reset should select the double-Shift preset")
     }
 
     // QA F4: a bare key (no modifier) is rejected during recording.

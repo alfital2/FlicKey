@@ -1,5 +1,55 @@
 import XCTest
 
+final class DictionaryRecoveryTests: XCTestCase {
+    func testColdDictionaryRecoversAndSuccessfulProbeStaysCached() {
+        var calls = 0
+        let checker = SystemSpellChecker(dictionaryProbe: { _ in
+            calls += 1
+            return calls == 3
+        })
+        XCTAssertFalse(checker.hasFunctionalDictionary("he"))
+        XCTAssertFalse(checker.hasFunctionalDictionary("he"))
+        XCTAssertTrue(checker.hasFunctionalDictionary("he"))
+        XCTAssertTrue(checker.hasFunctionalDictionary("he"))
+        XCTAssertEqual(calls, 3, "a recovered dictionary must not regress on a later probe")
+    }
+
+    func testBrokenDictionaryStopsProbingAfterItsRetryBudget() {
+        var calls = 0
+        let checker = SystemSpellChecker(dictionaryProbe: { _ in
+            calls += 1
+            return false
+        })
+        for _ in 0..<20 { XCTAssertFalse(checker.hasFunctionalDictionary("el")) }
+        XCTAssertEqual(calls, 8, "a broken dictionary must not be probed on every word forever")
+    }
+
+    func testDictionaryCanRecoverOnTheLastAllowedProbe() {
+        var calls = 0
+        let checker = SystemSpellChecker(dictionaryProbe: { _ in
+            calls += 1
+            return calls == 8
+        })
+        for _ in 0..<7 { XCTAssertFalse(checker.hasFunctionalDictionary("he")) }
+        XCTAssertTrue(checker.hasFunctionalDictionary("he"))
+        XCTAssertTrue(checker.hasFunctionalDictionary("he"))
+        XCTAssertEqual(calls, 8)
+    }
+
+    func testExhaustingOneLanguageDoesNotDisableAnother() {
+        var calls: [String: Int] = [:]
+        let checker = SystemSpellChecker(dictionaryProbe: { language in
+            calls[language, default: 0] += 1
+            return language == "he" && calls[language] == 2
+        })
+        for _ in 0..<8 { XCTAssertFalse(checker.hasFunctionalDictionary("el")) }
+        XCTAssertFalse(checker.hasFunctionalDictionary("he"))
+        XCTAssertTrue(checker.hasFunctionalDictionary("he"))
+        XCTAssertFalse(checker.hasFunctionalDictionary("el"))
+        XCTAssertEqual(calls, ["el": 8, "he": 2])
+    }
+}
+
 // A fake spell checker with an explicit set of FUNCTIONAL languages. Words in
 // `valid` are correctly spelled; anything else in a functional language is
 // misspelled. A non-functional language flags nothing, mirroring the real

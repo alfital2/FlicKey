@@ -7,10 +7,10 @@ enum AppDefaults {
     private(set) static var store: UserDefaults = .standard
 
     // Call ONCE at launch, before any store is touched.
-    static func useIsolatedStoreForUITests() {
+    static func useIsolatedStoreForUITests(reset: Bool = true) {
         let suite = "com.talalfi.FlicKey.uitest"
         guard let isolated = UserDefaults(suiteName: suite) else { return }
-        isolated.removePersistentDomain(forName: suite)   // clean slate each run
+        if reset { isolated.removePersistentDomain(forName: suite) }
         store = isolated
     }
 }

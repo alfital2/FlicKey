@@ -21,6 +21,7 @@ final class StatsSettingsViewController: NSViewController {
 
         bigLabel.font = roundedBold(40)
         bigLabel.textColor = .controlAccentColor
+        bigLabel.setAccessibilityIdentifier("switchStatsTotal")
 
         let caption = NSTextField(labelWithString:
             "layout switches and fixes FlicKey handled for you, and counting")
@@ -44,6 +45,7 @@ final class StatsSettingsViewController: NSViewController {
 
         nagCheckbox.target = self
         nagCheckbox.action = #selector(toggleNag)
+        nagCheckbox.setAccessibilityIdentifier("disableStatsNags")
 
         let foot = settingsFootnote(
             "Counts auto-fixes, on-demand conversions (double-tap Shift), and per-app, "

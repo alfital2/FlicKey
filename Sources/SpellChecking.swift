@@ -19,6 +19,13 @@ protocol SpellChecking {
 final class SystemSpellChecker: SpellChecking {
 
     private var functionalCache: [String: Bool] = [:]
+    private let dictionaryProbe: ((String) -> Bool)?
+
+    // Inject only the external dictionary probe; retries and caching remain the
+    // production implementation, without requiring a running AppleSpell daemon.
+    init(dictionaryProbe: ((String) -> Bool)? = nil) {
+        self.dictionaryProbe = dictionaryProbe
+    }
 
     // A NEGATIVE probe is retried this many times before it becomes final. A cold
     // AppleSpell (login-item start at boot) answers "nothing is misspelled" until
@@ -50,8 +57,9 @@ final class SystemSpellChecker: SpellChecking {
     // NSSpellChecker call in the app.
     func hasFunctionalDictionary(_ language: String) -> Bool {
         if let cached = functionalCache[language] { return cached }
-        let works = NSSpellChecker.shared.availableLanguages.contains(language)
-            && isMisspelled(Self.gibberish(for: language), language: language)
+        let works = dictionaryProbe?(language) ?? (
+            NSSpellChecker.shared.availableLanguages.contains(language)
+                && isMisspelled(Self.gibberish(for: language), language: language))
         if works {
             functionalCache[language] = true
             negativeProbes[language] = nil

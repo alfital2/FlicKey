@@ -14,6 +14,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         self.tabMemory = tabMemory
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        statusItem.button?.setAccessibilityIdentifier("flickeyStatusItem")
 
         let menu = NSMenu()
         menu.delegate = self // rebuilt on each open so the site section is current
@@ -34,8 +35,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     // drawn in the user's chosen style (brand gradient / monochrome / per-language).
     private func updateInputIndicator() {
         guard let button = statusItem.button else { return }
+        let code = InputSourceManager.currentSourceCode()
         button.title = ""
-        button.image = MenuBarIcon.badge(code: InputSourceManager.currentSourceCode(),
+        button.setAccessibilityLabel("FlicKey input \(code)")
+        button.setAccessibilityValue(code)
+        button.image = MenuBarIcon.badge(code: code,
                                          sourceID: InputSourceManager.currentSourceID() ?? "",
                                          style: MenuBarIcon.style)
     }

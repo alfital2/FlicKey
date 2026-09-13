@@ -150,6 +150,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.talalfi.FlicKeyUITests
         GENERATE_INFOPLIST_FILE: YES
         TEST_TARGET_NAME: FlicKey
+        CODE_SIGN_ENTITLEMENTS: FlicKeyUITests.entitlements
 
 schemes:
   FlicKey:

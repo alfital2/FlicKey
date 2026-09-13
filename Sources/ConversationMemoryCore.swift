@@ -39,6 +39,12 @@ final class ConversationMemoryCore {
     // The source we most recently auto-applied, and when. nil = no pending echo.
     private var lastAppliedSource: String?
     private var lastAppliedAt: TimeInterval = 0
+    // TISSelectInputSource is asynchronous. A notification already in flight can
+    // arrive after enter() but before the requested source becomes current. In
+    // that short transition it still reports the pre-apply source and must not
+    // be learned over the destination key.
+    private var sourceBeforeApply: String?
+    private var hasObservedAppliedSource = false
 
     private let lookup: (String, String) -> String?
     private let store: (String, String, String) -> Void
@@ -81,6 +87,8 @@ final class ConversationMemoryCore {
         guard key != currentKey else { return }   // debounce identical retitles
         currentKey = key
         guard let key, let source = lookup(namespace, key) else { return }
+        sourceBeforeApply = currentSource()
+        hasObservedAppliedSource = sourceBeforeApply == source
         lastAppliedSource = source
         lastAppliedAt = now()
         applySource(source)
@@ -91,10 +99,18 @@ final class ConversationMemoryCore {
         guard let key = currentKey, let source = currentSource() else { return }
         // Our own apply echoing back — the prompt echo or one of the delayed
         // settling duplicates — all report the source we just applied.
-        if let last = lastAppliedSource, source == last, now() - lastAppliedAt < echoWindow {
-            return
+        if let last = lastAppliedSource, now() - lastAppliedAt < echoWindow {
+            if source == last {
+                hasObservedAppliedSource = true
+                return
+            }
+            if !hasObservedAppliedSource, source == sourceBeforeApply {
+                return
+            }
         }
         lastAppliedSource = nil   // a genuine change supersedes any pending echo
+        sourceBeforeApply = nil
+        hasObservedAppliedSource = false
         store(source, namespace, key)
         onSaved(source, key)
     }
@@ -102,5 +118,7 @@ final class ConversationMemoryCore {
     func reset() {
         currentKey = nil
         lastAppliedSource = nil
+        sourceBeforeApply = nil
+        hasObservedAppliedSource = false
     }
 }

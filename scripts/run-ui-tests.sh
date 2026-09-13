@@ -1,17 +1,14 @@
 #!/usr/bin/env bash
 #
-# run-ui-tests.sh — run the local UI test suite (Settings window).
+# run-ui-tests.sh — run the standard local UI test suite.
 #
 # ⚠️  These tests DRIVE THE REAL APP: they open windows, click, and type, so they
 #     take over the screen/keyboard for ~1 minute. Don't touch the mouse or
 #     keyboard while it runs. (This is why UI tests live in their own scheme and
 #     never run as part of the normal `xcodebuild test -scheme FlicKey`.)
 #
-# What this covers:  the Settings window — tabs, controls, toggles, ⌘W close.
-# What it does NOT cover:  the permission-gated functional flows (fix hotkey,
-#     per-app / per-site / per-conversation switching) — see TESTING.md for the
-#     manual checklist. Their LOGIC is already covered by the unit/replay tests
-#     (scripts: xcodebuild test -scheme FlicKey).
+# Covers Settings, TextEdit conversion and auto-switching, per-app routing,
+# Spotlight, and the status menu. Live browsers and Teams remain opt-in.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -42,6 +39,7 @@ xcodebuild test \
   PROVISIONING_PROFILE_SPECIFIER= \
   ENABLE_HARDENED_RUNTIME=NO \
   -skip-testing:FlicKeyUITests/BrowserIntegrationUITests \
+  -skip-testing:FlicKeyUITests/FirefoxBrowserIntegrationUITests \
   -skip-testing:FlicKeyUITests/TeamsIntegrationUITests \
   -resultBundlePath "$RESULT_BUNDLE" \
   2>&1 | tee "$LOG" \

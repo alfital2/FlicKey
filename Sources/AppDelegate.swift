@@ -20,11 +20,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // UI tests: redirect all settings to a throwaway store BEFORE anything
         // reads it, so tests can't read or corrupt the user's real settings.
         if UITestMode.isActive {
-            AppDefaults.useIsolatedStoreForUITests()
+            AppDefaults.useIsolatedStoreForUITests(reset: UITestMode.shouldResetState)
             // TrialManager/LicenseStore point at .uitest Keychain items in this
             // mode; clear the trial one so every UI-test run starts
             // deterministically with all 30 trial days left, unlicensed.
-            TrialManager.reset()
+            if UITestMode.shouldResetState { TrialManager.reset() }
         }
         // UI tests: seed per-site memory into the (isolated) store. Value form:
         //   "domain=sourceID;domain=sourceID"
@@ -49,6 +49,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 RulesStore.addCustomApp(CustomApp(name: name, bundleID: ""))
                 RulesStore.set(String(kv[1]), forMatchKey: name.lowercased())
             }
+        }
+        if args.contains("-uiTestEnableAutoSwitch") {
+            AutoSwitchSettings.isEnabled = true
         }
 
         statusBar = StatusBarController(tabMemory: tabMemory)

@@ -22,16 +22,32 @@ final class OnScreenSpanEdgeCaseTests: XCTestCase {
         OnScreenSpan.length(beforeCaret: Array(before), words: words)
     }
 
-    // Mirrors AutoSwitchController.onScreenDeleteCount (private): trust the
-    // measured span unless it exceeds the anti-runaway cap; AX-unreadable falls
-    // back to the tracked count.
     private func deleteCount(run: String, before: [Character]?) -> Int {
-        let tracked = run.count
-        guard let before else { return tracked }
-        let words = run.split(separator: " ").count
-        let onScreen = OnScreenSpan.length(beforeCaret: before, words: words)
-        guard onScreen <= tracked * 3 + 24 else { return min(tracked, before.count) }
-        return onScreen
+        OnScreenSpan.deletion(run: run, beforeCaret: before).count
+    }
+
+    func testImplausibleExpansionFallsBackWithoutDeletingTheWholeField() {
+        let before = Array("keep " + String(repeating: "x", count: 40) + " ")
+        let deletion = OnScreenSpan.deletion(run: "ab ", beforeCaret: before)
+        XCTAssertEqual(deletion.count, 3)
+        XCTAssertEqual(deletion.fallback, .spanOutOfRange)
+    }
+
+    func testExpansionAtSafetyLimitIsStillMeasured() {
+        // Three tracked characters allow a span of 33; only larger spans fall back.
+        let deletion = OnScreenSpan.deletion(
+            run: "ab ", beforeCaret: Array("keep " + String(repeating: "x", count: 32) + " "))
+        XCTAssertEqual(deletion.count, 33)
+        XCTAssertNil(deletion.fallback)
+    }
+
+    func testReadableEmptyFieldDoesNotUseUnreadableFallback() {
+        let empty = OnScreenSpan.deletion(run: "akuo ", beforeCaret: [])
+        XCTAssertEqual(empty.count, 0)
+        XCTAssertNil(empty.fallback)
+        let unreadable = OnScreenSpan.deletion(run: "akuo ", beforeCaret: nil)
+        XCTAssertEqual(unreadable.count, 5)
+        XCTAssertEqual(unreadable.fallback, .axUnreadable)
     }
 
     /// Replays the full delete+retype and returns the resulting field text.
