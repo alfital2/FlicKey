@@ -1,39 +1,78 @@
-# FlicKey License
-
+# FlicKey Source License 2.0
 
 Copyright (c) 2026 Tal Alfi
 
-Permission is granted to use the FlicKey source code and the other source files
-in this repository (together, the "FlicKey Source") in any way you like,
-including reading, compiling, modifying, and reusing it in your own projects,
-subject only to the conditions below. These conditions apply to **publishing or
-distributing software**, not to private use: compiling FlicKey for yourself and
-using it on your own machines carries no conditions at all.
+## Applicability
 
-If you publish or distribute any work that is derived from, or includes any
-part of, the FlicKey Source, then all of the following apply:
+This license applies to the FlicKey source code and other source files in this
+repository (together, the "FlicKey Source") beginning September 13, 2026,
+including development leading to FlicKey 0.5.6 and later releases. FlicKey
+0.5.5 and earlier remain governed by the license included with those releases.
 
-1. **Attribution.** You must state clearly, in a place a user of your work can
-   reasonably find, that your work is derived from the FlicKey Source.
+## Permitted private use
 
-2. **No malicious software.** Your published work must not contain malware,
-   spyware, hidden data collection, or any intentionally harmful or deceptive
-   behavior.
+You may read, compile, modify, and reuse the FlicKey Source for private use.
+You may run your private builds on machines you own or control, provided that
+you do not distribute or make those builds available to anyone else.
 
-3. **No paid or unlocked republishing.** You may not charge money, or collect
-   any other payment, for a published work that is substantially FlicKey. Your
-   published work must retain the monetization systems present in the FlicKey
-   Source (the licensing, trial, and purchase flows) unmodified, active, and
-   functioning as they do in official FlicKey releases, so that any purchase a
-   user makes through them goes to the FlicKey author.
+## Permitted source-only forks
 
-   Exception: condition 3 does not apply if your work contains substantial
-   original improvements or additions such that it is reasonably considered an
-   independent derivative work rather than a republication of FlicKey.
+You may create and publish a source-only fork for studying the code,
+experimenting, testing changes, or contributing changes back to FlicKey,
+provided that:
 
-The "FlicKey" name, the FlicKey icon, and other FlicKey branding are **not**
-licensed by this document. Published derivative works must use a different name
-and icon.
+1. you retain this license and all copyright notices;
+2. you clearly state that the fork is derived from the FlicKey Source; and
+3. you do not use the fork to distribute binaries, releases, packages,
+   products, or services derived from the FlicKey Source.
+
+## No distribution of derived products or services
+
+Except for the private use and source-only forks expressly permitted above,
+you may not, without the copyright holder's prior written permission,
+distribute, publish, sublicense, sell, make available to third parties, or
+offer as a product or service any software that copies, incorporates, modifies,
+translates, or is based on all or a substantial portion of the FlicKey Source
+(a "Covered Product").
+
+For clarity, without prior written permission you may not:
+
+- remove, bypass, replace, disable, or circumvent FlicKey's licensing, trial,
+  entitlement, or purchase systems in a Covered Product made available to
+  others;
+- charge for, sell access to, or otherwise monetize FlicKey-derived
+  functionality;
+- distribute a Covered Product as a free or paid alternative to FlicKey; or
+- avoid these restrictions by adding features, refactoring or replacing parts
+  of the code, changing the interface, or renaming the software.
+
+Permission for an exception must be granted explicitly in writing by the
+copyright holder. No amount of modification or additional functionality by
+itself creates an exception.
+
+## Independent implementations
+
+This license does not restrict independently created software that does not
+copy or incorporate protected expression from the FlicKey Source. Similar
+ideas, features, or functionality alone do not make software a Covered Product.
+
+## Safety
+
+A permitted public source fork must not contain malware, spyware, hidden data
+collection, or any intentionally harmful or deceptive behavior.
+
+## Branding
+
+The "FlicKey" name, the FlicKey icon, and other FlicKey branding are not
+licensed by this document. No permission to use FlicKey trademarks or branding
+is granted.
+
+## Termination
+
+The permissions granted by this license terminate automatically if you breach
+its terms. The copyright holder may reinstate permission in writing.
+
+## Disclaimer
 
 THE FLICKEY SOURCE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
