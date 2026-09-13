@@ -29,22 +29,13 @@ enum TrialManager {
         // pre-cutoff so the grandfather clause holds. The failure direction is
         // deliberate: when in doubt, the user gets FlicKey free.
         let fresh: TrialState
-        if hasEvidenceOfPriorUse() {
+        if PriorUseEvidence.exists(in: AppDefaults.store) {
             fresh = TrialState(firstRun: Entitlement.grandfatherCutoff - 1, maxElapsed: 0, lastNag: 0)
         } else {
             fresh = TrialLogic.start(now: now())   // first ever launch
         }
         save(fresh)
         return fresh
-    }
-
-    // Long-lived keys that only exist after real prior use of FlicKey (never
-    // written during the launch path that runs before the first load()).
-    private static func hasEvidenceOfPriorUse() -> Bool {
-        let markers = ["hasCompletedFirstLaunch", "whatsNewSeenVersion", "welcomeTourSeen",
-                       "autoSwitchExceptions", "clickSound.variant", "switchStats.autoFix",
-                       "statsNagLastMilestone", "blockedWordsLastPromptAt"]
-        return markers.contains { AppDefaults.store.object(forKey: $0) != nil }
     }
 
     // Marks that this install has completed a launch - the primary prior-use

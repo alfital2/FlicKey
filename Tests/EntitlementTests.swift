@@ -112,4 +112,40 @@ final class EntitlementTests: XCTestCase {
                                           now: after, isLicensed: false),
                        .trial(daysLeft: 30))
     }
+
+    // MARK: - Existing-customer migration safety
+
+    func testLegacyTrialRecordStillDecodesWithoutReminderField() throws {
+        // Public builds before trial reminders stored exactly these three fields.
+        let data = Data(#"{"firstRun":1780000000,"maxElapsed":86400,"lastNag":0}"#.utf8)
+        let decoded = try JSONDecoder().decode(TrialState.self, from: data)
+
+        XCTAssertEqual(decoded.firstRun, 1_780_000_000)
+        XCTAssertEqual(decoded.maxElapsed, day)
+        XCTAssertEqual(decoded.lastNag, 0)
+        XCTAssertNil(decoded.trialReminderLevel)
+    }
+
+    func testEmptyPreferencesDoNotLookLikeAnExistingInstall() {
+        let suite = "EntitlementTests.empty.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertFalse(PriorUseEvidence.exists(in: defaults))
+    }
+
+    func testEveryHistoricalPreferenceProtectsAnExistingCustomer() {
+        let suite = "EntitlementTests.migration.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        for key in PriorUseEvidence.markerKeys {
+            defaults.set(true, forKey: key)
+            XCTAssertTrue(PriorUseEvidence.exists(in: defaults),
+                          "Existing preference \(key) must count as prior use")
+            defaults.removeObject(forKey: key)
+            XCTAssertFalse(PriorUseEvidence.exists(in: defaults),
+                           "Test isolation failed after removing \(key)")
+        }
+    }
 }

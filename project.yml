@@ -50,8 +50,9 @@ targets:
         CURRENT_PROJECT_VERSION: "59"
         ENABLE_HARDENED_RUNTIME: YES
       configs:
-        # Debug builds are QA/test builds — flag them so a "QA TEST BUILD" marker
-        # shows in Settings (and #if DEBUG diagnostics compile in).
+        # Keep developer-only diagnostics and explicit entitlement simulation
+        # arguments available in Debug. Ordinary Debug builds still enforce the
+        # same real entitlement path as Release.
         Debug:
           SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
         # Never ship code-coverage instrumentation in the distributed build.
@@ -107,6 +108,7 @@ targets:
       - path: Sources/OnScreenSpan.swift
       - path: Sources/OrthographyRules.swift
       - path: Sources/PanelSession.swift
+      - path: Sources/PriorUseEvidence.swift
       - path: Sources/ReportComposer.swift
       - path: Sources/Shortcut.swift
       - path: Sources/SiteMemoryStore.swift
