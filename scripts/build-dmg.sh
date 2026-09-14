@@ -11,8 +11,8 @@
 #
 # Notarization: the DMG is submitted to Apple's notary service and the ticket
 # is stapled before the file is considered done. Requires a Developer ID
-# Application certificate and a stored notarytool keychain profile named
-# "flickey-notarize" (set up once with `xcrun notarytool store-credentials`).
+# Application certificate plus either FLICKEY_NOTARY_KEY_PATH/KEY_ID/ISSUER or
+# a stored notarytool keychain profile named "flickey-notarize".
 #
 # Usage:  scripts/build-dmg.sh
 # Output: dist/FlicKey.dmg   (asset name the landing page hard-codes)
@@ -111,9 +111,17 @@ rm -f "$RW"
 hdiutil verify "$DIST_DIR/$APP_NAME.dmg" >/dev/null
 
 echo "==> Notarizing DMG"
-xcrun notarytool submit "$DIST_DIR/$APP_NAME.dmg" \
-  --keychain-profile "flickey-notarize" \
-  --wait
+if [ -n "${FLICKEY_NOTARY_KEY_PATH:-}" ] && [ -n "${FLICKEY_NOTARY_KEY_ID:-}" ]; then
+  NOTARY_AUTH=(--key "$FLICKEY_NOTARY_KEY_PATH" --key-id "$FLICKEY_NOTARY_KEY_ID")
+  if [ -n "${FLICKEY_NOTARY_ISSUER:-}" ]; then
+    NOTARY_AUTH+=(--issuer "$FLICKEY_NOTARY_ISSUER")
+  fi
+  xcrun notarytool submit "$DIST_DIR/$APP_NAME.dmg" "${NOTARY_AUTH[@]}" --wait
+else
+  xcrun notarytool submit "$DIST_DIR/$APP_NAME.dmg" \
+    --keychain-profile "flickey-notarize" \
+    --wait
+fi
 
 echo "==> Stapling notarization ticket"
 xcrun stapler staple "$DIST_DIR/$APP_NAME.dmg"
