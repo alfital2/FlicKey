@@ -179,6 +179,7 @@ final class AppRulesTests: XCTestCase {
     }
 
     func testVisitDoesNotAddAnUnlistedAppWhenAutomaticRememberingIsOff() {
+        AppRules.setRemembersVisitedApps(false)
         let app = AppRules.appRuleForVisit(bundleID: "com.test.visited",
                                            name: "Visited App",
                                            sourceID: "test.layout")

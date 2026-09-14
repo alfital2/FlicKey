@@ -3,4 +3,5 @@ dist/
 DerivedData/
 xcuserdata/
 FlicKey.xcodeproj/
+scripts/sparkle-tools/
 *.local.*
