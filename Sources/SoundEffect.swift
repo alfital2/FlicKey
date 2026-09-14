@@ -26,7 +26,7 @@ enum SoundEffect {
     private static let enabledKey = "clickSound.enabled"
     private static let variantKey = "clickSound.variant"
     private static let volumeKey = "clickSound.volumeLevel"
-    private static let defaultID = "knock"
+    private static let defaultID = "keyboard"
 
     // Four discrete volume steps (0…3). Governs every FlicKey click — the
     // conversion click and the layout-switch cue alike.
@@ -39,7 +39,7 @@ enum SoundEffect {
 
     static var volumeLevel: Int {
         get {
-            guard AppDefaults.store.object(forKey: volumeKey) != nil else { return volumeLevels - 1 }
+            guard AppDefaults.store.object(forKey: volumeKey) != nil else { return 0 }
             return max(0, min(volumeLevels - 1, AppDefaults.store.integer(forKey: volumeKey)))
         }
         set {

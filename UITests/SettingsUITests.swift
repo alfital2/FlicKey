@@ -82,18 +82,19 @@ final class SettingsUITests: XCTestCase {
         let picker = app.popUpButtons["tapsPopup"].firstMatch
         XCTAssertTrue(picker.exists, "at least one per-layout tap picker should exist")
 
-        // Fresh isolated store: haptic defaults on, sound off → pickers enabled.
-        XCTAssertEqual(haptic.value as? Int, 1, "haptic should default on")
+        // Fresh isolated store: both cue outputs default off, so pickers start disabled.
+        XCTAssertEqual(haptic.value as? Int, 0, "haptic should default off")
         XCTAssertEqual(sound.value as? Int, 0, "sound should default off")
-        XCTAssertTrue(picker.isEnabled, "pickers should be enabled while haptic is on")
+        XCTAssertFalse(picker.isEnabled, "pickers should disable while both outputs are off")
 
-        haptic.click()   // both outputs now off
-        XCTAssertTrue(waitUntil(timeout: 3) { !picker.isEnabled },
-                      "pickers should disable when haptic and sound are both off")
-
-        sound.click()    // sound alone should re-enable them
+        haptic.click()
         XCTAssertTrue(waitUntil(timeout: 3) { picker.isEnabled },
-                      "pickers should re-enable when sound is on")
+                      "haptic alone should enable the pickers")
+
+        haptic.click()
+        sound.click()
+        XCTAssertTrue(waitUntil(timeout: 3) { picker.isEnabled },
+                      "sound alone should enable the pickers")
     }
 
     // The haptic-intensity picker only matters while the haptic is on.
@@ -105,14 +106,12 @@ final class SettingsUITests: XCTestCase {
         let intensity = control("hapticIntensity")
         XCTAssertTrue(intensity.exists, "intensity control should exist")
 
-        XCTAssertEqual(haptic.value as? Int, 1, "haptic should default on")
-        XCTAssertTrue(intensity.isEnabled, "intensity should be enabled while haptic is on")
+        XCTAssertEqual(haptic.value as? Int, 0, "haptic should default off")
+        XCTAssertFalse(intensity.isEnabled, "intensity should disable while haptic is off")
 
-        haptic.click()   // haptic off
-        XCTAssertTrue(waitUntil(timeout: 3) { !intensity.isEnabled },
-                      "intensity should disable when the haptic is off")
-        haptic.click()   // restore
-        XCTAssertTrue(waitUntil(timeout: 3) { intensity.isEnabled })
+        haptic.click()
+        XCTAssertTrue(waitUntil(timeout: 3) { intensity.isEnabled },
+                      "intensity should enable when the haptic is on")
     }
 
     func testShortcutTabHasRecorderAndReset() {

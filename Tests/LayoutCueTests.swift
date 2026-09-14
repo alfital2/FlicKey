@@ -123,7 +123,7 @@ final class LayoutCueSettingsTests: XCTestCase {
     override func tearDown() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
 
     func testToggleDefaults() {
-        XCTAssertTrue(LayoutCueSettings.hapticEnabled)     // haptic on by default
+        XCTAssertFalse(LayoutCueSettings.hapticEnabled)    // haptic is opt-in
         XCTAssertFalse(LayoutCueSettings.soundEnabled)     // sound opt-in
     }
 
@@ -134,12 +134,12 @@ final class LayoutCueSettingsTests: XCTestCase {
         XCTAssertTrue(LayoutCueSettings.soundEnabled)
     }
 
-    // With nothing stored, English defaults to 1 tap, Hebrew to 2, others Off.
+    // With nothing stored, English and Hebrew default to 1 tap, others Off.
     func testTapCountDefaultsByLanguage() {
         XCTAssertEqual(LayoutCueSettings.tapCount(forSourceID: "com.apple.keylayout.ABC",
                                                   defaultLanguageCode: "en"), 1)
         XCTAssertEqual(LayoutCueSettings.tapCount(forSourceID: "com.apple.keylayout.Hebrew-PC",
-                                                  defaultLanguageCode: "he"), 2)
+                                                  defaultLanguageCode: "he"), 1)
         XCTAssertEqual(LayoutCueSettings.tapCount(forSourceID: "com.apple.keylayout.Arabic",
                                                   defaultLanguageCode: "ar"), 0)
     }
@@ -165,9 +165,8 @@ final class HapticIntensityTests: XCTestCase {
     override func setUp() { UserDefaults.standard.removeObject(forKey: key) }
     override func tearDown() { UserDefaults.standard.removeObject(forKey: key) }
 
-    func testDefaultIsStrongest() {
-        // Default preserves today's feel (the strongest tap).
-        XCTAssertEqual(LayoutCueSettings.hapticIntensityLevel, LayoutCueSettings.hapticLevels - 1)
+    func testDefaultIsLight() {
+        XCTAssertEqual(LayoutCueSettings.hapticIntensityLevel, 0)
     }
 
     func testLevelPersistsAndClamps() {
@@ -188,12 +187,16 @@ final class HapticIntensityTests: XCTestCase {
 
 final class SoundEffectVolumeTests: XCTestCase {
 
-    private let key = "clickSound.volumeLevel"
-    override func setUp() { UserDefaults.standard.removeObject(forKey: key) }
-    override func tearDown() { UserDefaults.standard.removeObject(forKey: key) }
+    private let keys = ["clickSound.volumeLevel", "clickSound.variant"]
+    override func setUp() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
+    override func tearDown() { keys.forEach { UserDefaults.standard.removeObject(forKey: $0) } }
 
     func testDefaultVolumeLevel() {
-        XCTAssertEqual(SoundEffect.volumeLevel, 3)   // 4 levels (0...3); loud by default
+        XCTAssertEqual(SoundEffect.volumeLevel, 0)   // quietest of 4 levels (0...3)
+    }
+
+    func testDefaultSoundIsKeyboard() {
+        XCTAssertEqual(SoundEffect.selected.id, "keyboard")
     }
 
     func testVolumeLevelPersistsAndClamps() {

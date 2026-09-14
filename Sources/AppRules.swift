@@ -457,7 +457,7 @@ enum RulesStore {
     }
 
     static func rememberVisitedAppsEnabled() -> Bool {
-        AppDefaults.store.bool(forKey: rememberVisitedKey)
+        AppDefaults.store.object(forKey: rememberVisitedKey) as? Bool ?? true
     }
 
     static func setRememberVisitedAppsEnabled(_ enabled: Bool) {

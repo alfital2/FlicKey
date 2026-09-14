@@ -26,6 +26,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // deterministically with all 30 trial days left, unlicensed.
             if UITestMode.shouldResetState { TrialManager.reset() }
         }
+        // Apply the login-item default only to a genuinely fresh install. Load
+        // the Keychain-backed first-run stamp before writing any preference: a
+        // surviving old stamp prevents a reinstall from changing the user's
+        // existing login-item choice.
+        let hadPriorPreferences = PriorUseEvidence.exists(in: AppDefaults.store)
+        let firstRun = TrialManager.load().firstRun
+        let isFreshInstall = !hadPriorPreferences && WelcomeTour.shouldShow(
+            firstRun: TimeInterval(firstRun),
+            now: Date().timeIntervalSince1970,
+            seen: false)
         // UI tests: seed per-site memory into the (isolated) store. Value form:
         //   "domain=sourceID;domain=sourceID"
         let args = ProcessInfo.processInfo.arguments
@@ -149,6 +159,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !UITestMode.isActive { TrialManager.persistRatchet() }
 
         refreshEntitlement()
+
+        if !UITestMode.isActive, isFreshInstall {
+            _ = LaunchAtLogin.setEnabled(true)
+        }
 
         // The prior-use marker for the keychain-loss grandfather heuristic. Set
         // strictly AFTER the entitlement decision above, so a genuinely fresh

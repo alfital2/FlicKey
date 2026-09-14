@@ -47,10 +47,13 @@ final class RulesStoreTests: XCTestCase {
     }
 
     func testRememberVisitedAppsSettingRoundTrips() {
+        RulesStore.setRememberVisitedAppsEnabled(false)
         XCTAssertFalse(RulesStore.rememberVisitedAppsEnabled())
         RulesStore.setRememberVisitedAppsEnabled(true)
         XCTAssertTrue(RulesStore.rememberVisitedAppsEnabled())
-        RulesStore.setRememberVisitedAppsEnabled(false)
-        XCTAssertFalse(RulesStore.rememberVisitedAppsEnabled())
+    }
+
+    func testRememberVisitedAppsDefaultsOn() {
+        XCTAssertTrue(RulesStore.rememberVisitedAppsEnabled())
     }
 }

@@ -40,15 +40,15 @@ struct LayoutCueCore {
     }
 }
 
-// Defaults-backed settings for the layout-switch cue. Haptic defaults ON,
-// sound is opt-in. Each layout (by input-source ID) gets a tap count 0–3
+// Defaults-backed settings for the layout-switch cue. Haptic and sound are
+// opt-in. Each layout (by input-source ID) gets a tap count 0–3
 // (0 = Off); the click sound mirrors the tap count. Perceptual ceiling is 3 —
 // more taps aren't reliably distinguishable.
 enum LayoutCueSettings {
 
     static let maxTaps = 3
     // Three haptic strengths, mapped to the OS's actuation IDs (light → strong).
-    // The strongest is ID 6 — the tap FlicKey has always used, so it's the default.
+    // The strongest is ID 6; the default picker position is Light.
     static let hapticLevels = 3
     private static let hapticActuationIDs: [Int32] = [1, 3, 6]
 
@@ -58,13 +58,13 @@ enum LayoutCueSettings {
     private static let tapsKey = "layoutCue.tapsBySource"
 
     static var hapticEnabled: Bool {
-        get { AppDefaults.store.object(forKey: hapticKey) as? Bool ?? true }
+        get { AppDefaults.store.object(forKey: hapticKey) as? Bool ?? false }
         set { AppDefaults.store.set(newValue, forKey: hapticKey) }
     }
 
     static var hapticIntensityLevel: Int {
         get {
-            guard AppDefaults.store.object(forKey: hapticLevelKey) != nil else { return hapticLevels - 1 }
+            guard AppDefaults.store.object(forKey: hapticLevelKey) != nil else { return 0 }
             return clampLevel(AppDefaults.store.integer(forKey: hapticLevelKey))
         }
         set { AppDefaults.store.set(clampLevel(newValue), forKey: hapticLevelKey) }
@@ -83,14 +83,14 @@ enum LayoutCueSettings {
     }
 
     // Tap count for a layout. A stored value wins; otherwise fall back to a
-    // sensible default from the layout's language (English → 1, Hebrew → 2,
+    // sensible default from the layout's language (English/Hebrew → 1,
     // everything else → 0/Off) so existing English/Hebrew users are unaffected
     // without ever opening Settings.
     static func tapCount(forSourceID id: String, defaultLanguageCode code: String?) -> Int {
         if let stored = stored()[id] { return clamp(stored) }
         switch code?.lowercased() {
         case "en": return 1
-        case "he": return 2
+        case "he": return 1
         default:   return 0
         }
     }
