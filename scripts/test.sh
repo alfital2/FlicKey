@@ -19,6 +19,7 @@
 #                in with a chat; excluded from the default UI run)
 #   conversion   wrong-layout fix (layout conversion / round-trips)
 #   fix-ui       LIVE: types gibberish in TextEdit, ⇧⇧, asserts it converts
+#   russian-ui   LIVE: converts English/Russian text both ways in TextEdit
 #                (part of the default UI run too)
 #   spotlight-ui LIVE: validates physical typing and conversion in Spotlight
 #   core         the shared decision engine
@@ -78,6 +79,8 @@ case "$COMPONENT" in
     t ConversionEngineTests; t LayoutConverterTests; t RoundTripTests ;;
   fix-ui)
     u HotkeyConversionUITests ;;   # LIVE: the ⇧⇧ fix in TextEdit (controls screen)
+  russian-ui)
+    u RussianConversionUITests ;;  # LIVE: ABC ↔ Russian conversion in TextEdit
   spotlight-ui)
     u SpotlightTypingRigUITests; u SpotlightConversionUITests ;;
   core)
@@ -110,7 +113,7 @@ case "$COMPONENT" in
     WHOLE_UNIT=1; WHOLE_UI=1 ;;
   *)
     echo "Unknown component: '$COMPONENT'"
-    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
+    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui russian-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
     exit 2 ;;
 esac
 
