@@ -1,5 +1,4 @@
 import XCTest
-@testable import FlicKey
 
 // The one-time "what's new" gate: show only when the developer set a note and the
 // user has not already seen that note's version.

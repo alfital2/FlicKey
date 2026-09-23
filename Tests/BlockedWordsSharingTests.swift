@@ -1,5 +1,4 @@
 import XCTest
-@testable import FlicKey
 
 // The opt-in blocked-words share decision: prompt only when the interval has
 // elapsed AND there is a blocked word we have not offered before.

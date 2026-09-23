@@ -1,5 +1,4 @@
 import XCTest
-@testable import FlicKey
 
 // The welcome tour gate: fresh installs only, once.
 final class WelcomeTourTests: XCTestCase {

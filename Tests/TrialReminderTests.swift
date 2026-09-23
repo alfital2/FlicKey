@@ -1,5 +1,4 @@
 import XCTest
-@testable import FlicKey
 
 // The pure end-of-trial reminder decision: fires at most once per threshold, in
 // order, never repeats, and honors a late first launch by skipping thresholds the

@@ -46,7 +46,11 @@ struct TypingBufferCore {
 final class TypingBuffer {
 
     private var core = TypingBufferCore()
+    private var trace = LayoutTypingTrace()
     var text: String { core.text }
+    var physicalStrokes: [KeyboardStroke]? {
+        trace.verified(for: text, map: InputSourceManager.currentSourceID().flatMap(LayoutMap.forSource))
+    }
 
     private var monitor: Any?
     private var localMonitor: Any?
@@ -86,7 +90,7 @@ final class TypingBuffer {
 
     deinit { stop() }
 
-    func reset() { core.reset() }
+    func reset() { core.reset(); trace.reset() }
 
     // Wrap our own synthetic backspace/retype so it doesn't feed back into the
     // buffer; afterwards adopt the converted text as the new "just typed" run.
@@ -94,6 +98,7 @@ final class TypingBuffer {
     func finishEdit(adopting newValue: String) {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
             self?.core.adopt(newValue)
+            self?.trace.adopt(newValue, map: InputSourceManager.currentSourceID().flatMap(LayoutMap.forSource))
             self?.suspended = false
         }
     }
@@ -103,8 +108,20 @@ final class TypingBuffer {
         switch event.type {
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
             core.apply(.boundary)                     // caret moved
+            trace.reset()
         case .keyDown:
-            if let semantic = Self.semanticEvent(for: event) { core.apply(semantic) }
+            if let semantic = Self.semanticEvent(for: event) {
+                switch semantic {
+                case .printable:
+                    trace.append(KeyboardStroke(event: event), sourceID: InputSourceManager.currentSourceID())
+                case .backspace, .boundary: trace.reset()
+                }
+                core.apply(semantic)
+            } else if event.characters?.isEmpty != false {
+                // A dead key may produce no text yet; its physical position is
+                // still needed to reconstruct the eventual composed character.
+                trace.append(KeyboardStroke(event: event), sourceID: InputSourceManager.currentSourceID())
+            }
         default:
             break
         }

@@ -169,7 +169,8 @@ final class HotkeyManager {
         // function (ConversionRouter.replacePlan) — only the execution lives here.
         let typed = typingBuffer.text
         let searchValue = typed.isEmpty ? nil : AXTextEditor.focusedSearchFieldValue()
-        if let plan = ConversionRouter.replacePlan(typed: typed, searchFieldValue: searchValue) {
+        if let plan = ConversionRouter.replacePlan(typed: typed, searchFieldValue: searchValue,
+                                                   physicalStrokes: typingBuffer.physicalStrokes) {
             typingBuffer.suspendDuringEdit()
             switch plan {
             case let .searchReplace(converted, targetSourceID):
@@ -204,6 +205,11 @@ final class HotkeyManager {
         // FALLBACK A — Accessibility read + replace of an existing selection.
         if let (element, selected) = AXTextEditor.selection() {
             let (converted, targetSourceID) = ConversionRouter.convertText(selected)
+            guard targetSourceID != nil else {
+                Overlay.show("No supported layout conversion", symbol: "keyboard")
+                finishConversion()
+                return
+            }
             if AXTextEditor.replaceSelection(element, with: converted) {
                 if let targetSourceID { onConversion?(targetSourceID) }
                 SoundEffect.playClick(); SwitchStats.record(.manualConvert)
@@ -251,6 +257,12 @@ final class HotkeyManager {
 
     private func convertAndPaste(_ text: String, snapshot: ClipboardSnapshot) {
         let (converted, targetSourceID) = ConversionRouter.convertText(text)
+        guard targetSourceID != nil else {
+            Overlay.show("No supported layout conversion", symbol: "keyboard")
+            ClipboardManager.restore(snapshot)
+            finishConversion()
+            return
+        }
         SoundEffect.playClick(); SwitchStats.record(.manualConvert)   // satisfying feedback the moment a fix lands
         ClipboardManager.paste(converted, onPasted: { [weak self] in
             // Switch layout the instant ⌘V is posted — don't wait for the

@@ -1,5 +1,4 @@
 import XCTest
-@testable import FlicKey
 
 // The non-licensed "helped you N times" nudge fires once per 1000-switch
 // milestone: only when the total reaches a higher multiple than last shown.

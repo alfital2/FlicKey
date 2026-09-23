@@ -103,6 +103,7 @@ targets:
       - path: Sources/LayoutConverter.swift
       - path: Sources/LayoutCue.swift
       - path: Sources/LayoutMap.swift
+      - path: Sources/KeyboardTransducer.swift
       - path: Sources/LemonSqueezy.swift
       - path: Sources/MenuBarIcon.swift
       - path: Sources/OnScreenSpan.swift

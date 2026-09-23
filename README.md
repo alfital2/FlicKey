@@ -15,6 +15,8 @@ If you type Hebrew and English you know the moment: you write a whole sentence, 
 
 Everything runs locally. FlicKey has no server, no account, and it does not send what you type anywhere.
 
+Conversion uses the keyboard layouts enabled in macOS. For text just typed, verified key history can recover distinctions that the resulting characters lose. Selected or edited text uses keyboard reconstruction and local dictionary evidence; some readings remain ambiguous. Automatic detection also depends on working dictionaries for the languages involved. See [layout coverage and limitations](docs/layout-conversion.md).
+
 ## Install
 
 Download the app from [flickey.site](https://flickey.site), drag it to Applications, and grant Accessibility access when asked. FlicKey needs Accessibility because that is the macOS mechanism for reading the text field it is fixing and for observing keystrokes. Requires macOS 13 or later.

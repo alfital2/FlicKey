@@ -7,14 +7,17 @@ import Foundation
 struct LayoutMap {
 
     let sourceID: String
+    let transducer: KeyboardTransducer
     private let keyToChar: [UInt16: String]        // unshifted
     private let keyToCharShift: [UInt16: String]   // shifted
+    private let keyToCharCaps: [UInt16: String]
+    private let keyToCharShiftCaps: [UInt16: String]
     private let charToKey: [String: (key: UInt16, shift: Bool)]
     let producedCharacters: Set<String>
     // The longest string any single key produces, in Characters. Almost always 1;
     // ArabicPC/Arabic-AZERTY produce the two-character lam-alef لا from the b key.
-    // The converter uses this for its longest-match-first walk, so such digraphs
-    // map back to their physical key instead of being split per character.
+    // The transducer retains both the one-key and separate-key interpretations
+    // of such outputs; neither interpretation is universally correct.
     let maxProducedLength: Int
 
     private static var cache: [String: LayoutMap] = [:]
@@ -26,15 +29,19 @@ struct LayoutMap {
         return map
     }
 
-    init?(sourceID: String) {
-        guard let data = Self.layoutData(forID: sourceID) else { return nil }
+    init?(sourceID: String, includingDisabled: Bool = false) {
+        guard let data = Self.layoutData(forID: sourceID, includingDisabled: includingDisabled) else { return nil }
 
         var normal: [UInt16: String] = [:]
         var shifted: [UInt16: String] = [:]
+        var caps: [UInt16: String] = [:]
+        var shiftedCaps: [UInt16: String] = [:]
         var reverse: [String: (UInt16, Bool)] = [:]
         var produced = Set<String>()
 
         for keyCode in UInt16(0)...127 {
+            caps[keyCode] = Self.translate(data, keyCode, shift: false, capsLock: true)
+            shiftedCaps[keyCode] = Self.translate(data, keyCode, shift: true, capsLock: true)
             if let c = Self.translate(data, keyCode, shift: false) {
                 normal[keyCode] = c
                 produced.insert(c)
@@ -49,8 +56,11 @@ struct LayoutMap {
         guard !produced.isEmpty else { return nil }
 
         self.sourceID = sourceID
+        self.transducer = KeyboardTransducer(data: data)
         self.keyToChar = normal
         self.keyToCharShift = shifted
+        self.keyToCharCaps = caps
+        self.keyToCharShiftCaps = shiftedCaps
         self.charToKey = reverse
         self.producedCharacters = produced
         self.maxProducedLength = produced.map(\.count).max() ?? 1
@@ -71,15 +81,19 @@ struct LayoutMap {
             if reverse[char] == nil { reverse[char] = (key, true) }
         }
         self.sourceID = sourceID
+        self.transducer = KeyboardTransducer(base: keyToChar, shift: keyToCharShift)
         self.keyToChar = keyToChar
         self.keyToCharShift = keyToCharShift
+        self.keyToCharCaps = keyToCharShift
+        self.keyToCharShiftCaps = keyToChar
         self.charToKey = reverse
         self.producedCharacters = produced
         self.maxProducedLength = produced.map(\.count).max() ?? 1
     }
 
-    func character(forKeyCode keyCode: UInt16, shift: Bool) -> String? {
-        shift ? keyToCharShift[keyCode] : keyToChar[keyCode]
+    func character(forKeyCode keyCode: UInt16, shift: Bool, capsLock: Bool = false) -> String? {
+        if capsLock { return shift ? keyToCharShiftCaps[keyCode] : keyToCharCaps[keyCode] }
+        return shift ? keyToCharShift[keyCode] : keyToChar[keyCode]
     }
 
     func key(forCharacter character: String) -> (key: UInt16, shift: Bool)? {
@@ -88,8 +102,8 @@ struct LayoutMap {
 
     // MARK: - UCKeyTranslate
 
-    private static func layoutData(forID id: String) -> Data? {
-        guard let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue()
+    private static func layoutData(forID id: String, includingDisabled: Bool) -> Data? {
+        guard let list = TISCreateInputSourceList(nil, includingDisabled)?.takeRetainedValue()
             as? [TISInputSource] else { return nil }
         for source in list {
             guard let idPtr = TISGetInputSourceProperty(source, kTISPropertyInputSourceID),
@@ -101,16 +115,17 @@ struct LayoutMap {
         return nil
     }
 
-    private static func translate(_ data: Data, _ keyCode: UInt16, shift: Bool) -> String? {
+    private static func translate(_ data: Data, _ keyCode: UInt16, shift: Bool,
+                                  capsLock: Bool = false) -> String? {
         data.withUnsafeBytes { buffer -> String? in
             guard let layout = buffer.bindMemory(to: UCKeyboardLayout.self).baseAddress else { return nil }
             var deadKeyState: UInt32 = 0
             var chars = [UniChar](repeating: 0, count: 8)
             var length = 0
-            let modifiers: UInt32 = shift ? 2 : 0 // (shiftKey >> 8) & 0xFF
+            let modifiers: UInt32 = (shift ? 2 : 0) | (capsLock ? 4 : 0)
             let err = UCKeyTranslate(layout, keyCode, UInt16(kUCKeyActionDown), modifiers,
                                      UInt32(LMGetKbdType()),
-                                     OptionBits(kUCKeyTranslateNoDeadKeysBit),
+                                     OptionBits(kUCKeyTranslateNoDeadKeysMask),
                                      &deadKeyState, chars.count, &length, &chars)
             guard err == noErr, length > 0 else { return nil }
             let string = String(utf16CodeUnits: chars, count: length)

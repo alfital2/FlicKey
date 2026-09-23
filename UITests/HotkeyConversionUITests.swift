@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 
 // The product's #1 feature, end to end: type wrong-layout gibberish into a real
 // text field (TextEdit), double-tap Shift, and assert the text physically
@@ -29,6 +30,8 @@ final class HotkeyConversionUITests: XCTestCase {
         flickey.launch()
 
         textEdit = XCUIApplication(bundleIdentifier: "com.apple.TextEdit")
+        textEdit.launchArguments = ["-NSAutomaticCapitalizationEnabled", "NO",
+                                    "-NSAutomaticSpellingCorrectionEnabled", "NO"]
         textEdit.launch()
     }
 
@@ -72,6 +75,45 @@ final class HotkeyConversionUITests: XCTestCase {
                       "second fix should toggle back; field=\"\(textView.value as? String ?? "")\"")
     }
 
+    func testPhysicalUppercaseAndMixedCaseStillConvertToHebrew() throws {
+        let field = try freshDocument()
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+        let codes: [Character: CGKeyCode] = ["a": 0, "k": 40, "u": 32, "o": 31, "q": 12, "w": 13]
+        for (input, expected) in [("AKUO", "שלום"), ("Akuo", "שלום"), ("QW", "/'")] {
+            field.click()
+            postPhysicalShortcut(keyCode: 0, flags: .maskCommand)
+            postPhysicalShortcut(keyCode: 51, flags: [])
+            XCTAssertTrue(waitUntil(timeout: 3) { (field.value as? String) == "" })
+            forceLatinInputSource()
+            for character in input {
+                let key = try XCTUnwrap(codes[Character(character.lowercased())])
+                for down in [true, false] {
+                    let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
+                    event?.flags = character.isUppercase ? .maskShift : []
+                    event?.post(tap: .cghidEventTap)
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.04))
+            }
+            XCTAssertTrue(waitUntil(timeout: 3) { (field.value as? String) == input })
+            XCTAssertTrue(triggerFix(until: { (field.value as? String) == expected }),
+                          "\(input) must become \(expected), got \(field.value ?? "nil")")
+            XCTAssertTrue(waitForSource(hebrew, 5))
+        }
+    }
+
+    func testSelectedTextConversionPreservesSurroundingText() throws {
+        let field = try freshDocument()
+        field.typeText("left akuo right")
+        XCTAssertEqual(field.value as? String, "left akuo right")
+        // Navigation invalidates captured typing, exercising the existing-text
+        // selection path independently of the typing-buffer fast path.
+        postPhysicalShortcut(keyCode: 123, flags: .maskCommand)
+        for _ in 0..<5 { postPhysicalShortcut(keyCode: 124, flags: []) }
+        for _ in 0..<4 { postPhysicalShortcut(keyCode: 124, flags: .maskShift) }
+        XCTAssertTrue(triggerFix(until: { (field.value as? String) == "left שלום right" }),
+                      "selected conversion must preserve both sides: \(field.value ?? "nil")")
+    }
+
     func testCustomShortcutReplacesOldTriggerAndPersists() throws {
         step("Record ⌃⌥9 through Settings")
         flickey.terminate()
@@ -94,8 +136,14 @@ final class HotkeyConversionUITests: XCTestCase {
         XCTAssertFalse(waitUntil(timeout: 1.5) { (textView.value as? String) == "שלום" })
 
         step("The recorded chord performs the conversion")
-        textEdit.typeKey("9", modifierFlags: [.control, .option])
-        XCTAssertTrue(waitUntil(timeout: 8) { (textView.value as? String) == "שלום" })
+        // A global hotkey changes the layout during delivery. Use a bounded
+        // physical chord: XCUI's character synthesis can keep injecting input
+        // while trying to finish its requested character under the new layout.
+        postCustomChord()
+        XCTAssertTrue(waitUntil(timeout: 8) { (textView.value as? String) == "שלום" },
+                      "custom shortcut result: \(textView.value ?? "nil")")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertEqual(textView.value as? String, "שלום", "the shortcut must not insert extra text")
 
         step("Relaunch and verify the custom trigger is retained")
         flickey.terminate()
@@ -106,6 +154,23 @@ final class HotkeyConversionUITests: XCTestCase {
     }
 
     // MARK: - helpers
+
+    private func postCustomChord() {
+        let events: [(CGKeyCode, Bool, CGEventFlags)] = [
+            (59, true, .maskControl),
+            (58, true, [.maskControl, .maskAlternate]),
+            (25, true, [.maskControl, .maskAlternate]),
+            (25, false, [.maskControl, .maskAlternate]),
+            (58, false, .maskControl),
+            (59, false, [])
+        ]
+        for (key, down, flags) in events {
+            let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)
+            event?.flags = flags
+            event?.post(tap: .cghidEventTap)
+            RunLoop.current.run(until: Date().addingTimeInterval(0.04))
+        }
+    }
 
     // A focused, EMPTY TextEdit document. TextEdit restores previous-session
     // windows with whatever was in them (a live run surfaced the user's Hebrew
