@@ -1,24 +1,24 @@
 ## Status
 
-`fix/auto-fix-global-retry` is an isolated branch/worktree from committed `main` (`4d1f6ff`). It now protects mid-sentence auto-fix with a short physical-input hold/replay transaction while retaining `main`'s broad keyboard fallback when AX editing or the new tap is unavailable. The original dirty worktree, prior failed integration branch, and host-installed FlicKey were not changed. The branch passed 530 unit tests and 8 live isolated-VM UI tests; it has not been merged or tried in the user's personal Mail/ChatGPT apps.
+`fix/auto-fix-global-retry` (implementation commit `ca7d6d4`) remains isolated from `main` and other dirty worktrees. Its auto-fix change passed 530 unit tests and 8 isolated-VM live UI tests. A locally signed Release QA build with overridden build number 72 is now installed and running at `/Applications/FlicKey.app`; the previous installed build 60 is preserved under this worktree's `build/HostQA/Previous/`. FlicKey currently shows an Accessibility Access Required alert, so the new host install has not yet been proven functional in the user's apps. It has not been merged.
 
 ## Recent changes
 
-- Added an optional pre-delivery input barrier that holds real keys/clicks during an edit and replays them FIFO after generated replacement keys; it uses a timestamp guard so a lagging monitor cannot edit an incomplete run. When unavailable, the original 150 ms quiet-gap path remains.
-- Tagged FlicKey-generated keys so the tracker ignores only those, while replayed physical keys remain visible. Replay maps held keys to the newly selected layout, including Shift and Caps Lock.
-- Fixed a generic AX false-positive: Firefox accepted an AX selected-text write but left its value unchanged and later duplicated the original words. Web-backed editors (detected by AXWebArea ancestry, not app name) now take the keyboard path; other AX writes require exact full-value verification and fail closed on uncertain mutation.
-- Added real-key VM tests for Terminal, TextEdit, Safari and Firefox textarea/contenteditable, a no-barrier Terminal failover, and a corrected physical-key undo/learned-block story. The 120 ms Debug-only pause forces overlapping typing; tests assert actual field/DOM text and a mid-sentence switch.
-- Final results: 530/530 headless units and 8/8 isolated-VM live UI tests passed on 2026-09-24. The dedicated `flickey-terminal-qa` VM was used; `flickey-ui` remained untouched.
+- Built this branch as local Release QA build 72 with the existing Developer ID identity; strict deep signature verification passed, and the installed binary's SHA-256 and CDHash match the built product.
+- Made a verified recoverable copy of installed build 60, then moved the old app to `build/HostQA/Previous/InstalledOriginal.app` before installing build 72 at `/Applications/FlicKey.app`.
+- Gracefully closed the older FlicKey processes. Verified exactly one FlicKey process running, from `/Applications/FlicKey.app` (build 72); did not alter the other session's `flickey-ui` VM.
+- Inspected the launched app UI: it shows an Accessibility Access Required alert. No Accessibility/TCC permission was granted or changed in this session.
 
 ## Open questions / blockers
 
-- Apple Mail compose and the host ChatGPT app were not exercised; the VM has no Mail account, and personal app UI was deliberately not inspected. Do not claim universal app compatibility from the eight fixtures.
-- AX-unreadable non-web editors still use the broad synthetic fallback as on main; their app-specific text services may introduce behavior not covered by these fixtures.
+- User action or explicit approval is needed to enable FlicKey in System Settings › Privacy & Security › Accessibility; auto-fix cannot be meaningfully tested on the host while that alert is present.
+- Apple Mail compose and the host ChatGPT app are still untested. The eight VM fixtures are not proof of universal app compatibility.
+- This is a locally signed, unnotarized QA build, not a distributable release. The build number 72 was an Xcode build-setting override, not a source version change.
 
 ## Next steps
 
-1. Review the branch diff and compare with the user's concurrent work before merging; this branch intentionally contains no prior integration branch's mandatory AX-focus policy.
-2. If the user wants personal-app QA, prepare a signed test build and test only a temporary Mail draft / empty ChatGPT composer with explicit UI permission; leave existing content untouched.
-3. Run the full release/QA matrix before merging to `main` or `dev`, including Spotlight/search safety and more layouts than ABC/Hebrew-PC.
+1. Have the user enable Accessibility for the installed FlicKey, or obtain explicit approval before doing it through the UI; verify the alert clears and auto-fix is enabled in the app's settings.
+2. Let the user test build 72 in the apps that previously failed; if authorized, run controlled tests in temporary Mail/ChatGPT fields without inspecting existing private content.
+3. Review the branch against concurrent work and run the remaining release/QA matrix before merging. To restore build 60, first quit build 72 and move the preserved app back to `/Applications/FlicKey.app`.
 
 _Last updated: 2026-09-24 by Codex_
