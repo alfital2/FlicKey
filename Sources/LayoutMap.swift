@@ -9,6 +9,8 @@ struct LayoutMap {
     let sourceID: String
     private let keyToChar: [UInt16: String]        // unshifted
     private let keyToCharShift: [UInt16: String]   // shifted
+    private let keyToCharCaps: [UInt16: String]
+    private let keyToCharShiftCaps: [UInt16: String]
     private let charToKey: [String: (key: UInt16, shift: Bool)]
     let producedCharacters: Set<String>
     // The longest string any single key produces, in Characters. Almost always 1;
@@ -31,10 +33,14 @@ struct LayoutMap {
 
         var normal: [UInt16: String] = [:]
         var shifted: [UInt16: String] = [:]
+        var caps: [UInt16: String] = [:]
+        var shiftedCaps: [UInt16: String] = [:]
         var reverse: [String: (UInt16, Bool)] = [:]
         var produced = Set<String>()
 
         for keyCode in UInt16(0)...127 {
+            caps[keyCode] = Self.translate(data, keyCode, shift: false, capsLock: true)
+            shiftedCaps[keyCode] = Self.translate(data, keyCode, shift: true, capsLock: true)
             if let c = Self.translate(data, keyCode, shift: false) {
                 normal[keyCode] = c
                 produced.insert(c)
@@ -51,6 +57,8 @@ struct LayoutMap {
         self.sourceID = sourceID
         self.keyToChar = normal
         self.keyToCharShift = shifted
+        self.keyToCharCaps = caps
+        self.keyToCharShiftCaps = shiftedCaps
         self.charToKey = reverse
         self.producedCharacters = produced
         self.maxProducedLength = produced.map(\.count).max() ?? 1
@@ -73,13 +81,16 @@ struct LayoutMap {
         self.sourceID = sourceID
         self.keyToChar = keyToChar
         self.keyToCharShift = keyToCharShift
+        self.keyToCharCaps = keyToCharShift
+        self.keyToCharShiftCaps = keyToChar
         self.charToKey = reverse
         self.producedCharacters = produced
         self.maxProducedLength = produced.map(\.count).max() ?? 1
     }
 
-    func character(forKeyCode keyCode: UInt16, shift: Bool) -> String? {
-        shift ? keyToCharShift[keyCode] : keyToChar[keyCode]
+    func character(forKeyCode keyCode: UInt16, shift: Bool, capsLock: Bool = false) -> String? {
+        if capsLock { return shift ? keyToCharShiftCaps[keyCode] : keyToCharCaps[keyCode] }
+        return shift ? keyToCharShift[keyCode] : keyToChar[keyCode]
     }
 
     func key(forCharacter character: String) -> (key: UInt16, shift: Bool)? {
@@ -101,13 +112,14 @@ struct LayoutMap {
         return nil
     }
 
-    private static func translate(_ data: Data, _ keyCode: UInt16, shift: Bool) -> String? {
+    private static func translate(_ data: Data, _ keyCode: UInt16, shift: Bool,
+                                  capsLock: Bool = false) -> String? {
         data.withUnsafeBytes { buffer -> String? in
             guard let layout = buffer.bindMemory(to: UCKeyboardLayout.self).baseAddress else { return nil }
             var deadKeyState: UInt32 = 0
             var chars = [UniChar](repeating: 0, count: 8)
             var length = 0
-            let modifiers: UInt32 = shift ? 2 : 0 // (shiftKey >> 8) & 0xFF
+            let modifiers: UInt32 = (shift ? 2 : 0) | (capsLock ? 4 : 0)
             let err = UCKeyTranslate(layout, keyCode, UInt16(kUCKeyActionDown), modifiers,
                                      UInt32(LMGetKbdType()),
                                      OptionBits(kUCKeyTranslateNoDeadKeysBit),

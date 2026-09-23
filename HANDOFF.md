@@ -1,28 +1,24 @@
 ## Status
 
-`dev` now includes two explicit input behaviors: fixed and persistent last-used memory. Ordinary apps remember app-wide, browsers per website, and supported chat apps per conversation. Existing saved source choices migrate conservatively as fixed rules. Version 0.5.5 (build 59) removes the rejected reset-on-launch experiment and is running locally for QA.
+`fix/auto-fix-global-retry` is an isolated branch/worktree from committed `main` (`4d1f6ff`). It now protects mid-sentence auto-fix with a short physical-input hold/replay transaction while retaining `main`'s broad keyboard fallback when AX editing or the new tap is unavailable. The original dirty worktree, prior failed integration branch, and host-installed FlicKey were not changed. The branch passed 530 unit tests and 8 live isolated-VM UI tests; it has not been merged or tried in the user's personal Mail/ChatGPT apps.
 
 ## Recent changes
 
-- Split fixed layout selection from learning: “Always” can no longer be overwritten by manual or automatic source changes.
-- Added persistent “Remember last used” for ordinary apps while retaining persistent per-website and per-conversation memory for browsers/chat apps.
-- Automatically discovered/learned ordinary apps now enter persistent memory mode instead of becoming ambiguous fixed rules.
-- Removed reset-on-launch and its session-memory implementation; any build 57 test setting safely becomes a fixed rule using its selected default.
-- Bumped the release to 0.5.5 (59); the full 517-test unit suite passes.
-- Packaged a unique universal Developer-ID-signed build 59 QA DMG; the exact mounted app passes strict nested signature checks for both architectures. The local-transfer artifact is not notarized.
-- Added an upgrade-contract regression that seeds released-build preferences and proves explicit app rules, custom apps, hidden rows, site memory, and conversation memory survive migration unchanged.
-- Made both test runners override the developer-specific project identity with local ad-hoc signing, so unit/UI suites build on clean Macs and VMs without release-signing credentials; focused tests and the full UI target build pass with that override.
-- Added VM test entry points that put a small `xcodebuild` wrapper first on `PATH`; it forces ad-hoc signing and disables hardened runtime only for disposable test runners. This avoids missing-certificate, mixed-Team-ID, and VirtioFS-xcconfig parsing failures; a real UI smoke test passes. `test-vm2.sh` exists solely to bypass the guest's cached first wrapper filename.
+- Added an optional pre-delivery input barrier that holds real keys/clicks during an edit and replays them FIFO after generated replacement keys; it uses a timestamp guard so a lagging monitor cannot edit an incomplete run. When unavailable, the original 150 ms quiet-gap path remains.
+- Tagged FlicKey-generated keys so the tracker ignores only those, while replayed physical keys remain visible. Replay maps held keys to the newly selected layout, including Shift and Caps Lock.
+- Fixed a generic AX false-positive: Firefox accepted an AX selected-text write but left its value unchanged and later duplicated the original words. Web-backed editors (detected by AXWebArea ancestry, not app name) now take the keyboard path; other AX writes require exact full-value verification and fail closed on uncertain mutation.
+- Added real-key VM tests for Terminal, TextEdit, Safari and Firefox textarea/contenteditable, a no-barrier Terminal failover, and a corrected physical-key undo/learned-block story. The 120 ms Debug-only pause forces overlapping typing; tests assert actual field/DOM text and a mid-sentence switch.
+- Final results: 530/530 headless units and 8/8 isolated-VM live UI tests passed on 2026-09-24. The dedicated `flickey-terminal-qa` VM was used; `flickey-ui` remained untouched.
 
 ## Open questions / blockers
 
-- Manual QA of both modes is still required before merging the feature branch into `dev`.
-- True per-tab or per-document identity is not part of this change; browser memory remains per website.
+- Apple Mail compose and the host ChatGPT app were not exercised; the VM has no Mail account, and personal app UI was deliberately not inspected. Do not claim universal app compatibility from the eight fixtures.
+- AX-unreadable non-web editors still use the broad synthetic fallback as on main; their app-specific text services may introduce behavior not covered by these fixtures.
 
 ## Next steps
 
-1. Manually verify fixed and persistent modes on an ordinary app.
-2. Verify persistent per-website Firefox behavior and per-conversation Teams/Slack behavior.
-3. Prepare the notarized release only after QA approval.
+1. Review the branch diff and compare with the user's concurrent work before merging; this branch intentionally contains no prior integration branch's mandatory AX-focus policy.
+2. If the user wants personal-app QA, prepare a signed test build and test only a temporary Mail draft / empty ChatGPT composer with explicit UI permission; leave existing content untouched.
+3. Run the full release/QA matrix before merging to `main` or `dev`, including Spotlight/search safety and more layouts than ABC/Hebrew-PC.
 
-_Last updated: 2026-09-12_
+_Last updated: 2026-09-24 by Codex_

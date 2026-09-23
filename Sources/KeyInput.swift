@@ -22,38 +22,40 @@ enum KeyInput {
     // Instant burst by default; `paced` inserts a small gap between deletes for
     // live-search fields (Spotlight, browser toolbars), which debounce on each
     // keystroke and drop events under a zero-gap burst.
-    static func deleteBackward(_ count: Int, paced: Bool = false) {
+    static func deleteBackward(_ count: Int, paced: Bool = false, token: Int64? = nil) {
         guard count > 0 else { return }
         let source = CGEventSource(stateID: .combinedSessionState)
         for _ in 0..<count {
-            postKey(backspace, down: true, source: source)
-            postKey(backspace, down: false, source: source)
+            postKey(backspace, down: true, source: source, token: token)
+            postKey(backspace, down: false, source: source, token: token)
             if paced { usleep(stepMicros) }
         }
     }
 
     // `paced`: search fields need a small gap between keystrokes (they drop events
     // under a zero-gap burst). Plain fields pass paced=false for an instant burst.
-    static func typeText(_ text: String, paced: Bool = false) {
+    static func typeText(_ text: String, paced: Bool = false, token: Int64? = nil) {
         guard !text.isEmpty else { return }
         let source = CGEventSource(stateID: .combinedSessionState)
         for character in text {
             var units = Array(String(character).utf16)
-            postUnicode(&units, down: true, source: source)
-            postUnicode(&units, down: false, source: source)
+            postUnicode(&units, down: true, source: source, token: token)
+            postUnicode(&units, down: false, source: source, token: token)
             if paced { usleep(stepMicros) }
         }
     }
 
-    private static func postKey(_ key: CGKeyCode, down: Bool, source: CGEventSource?) {
+    private static func postKey(_ key: CGKeyCode, down: Bool, source: CGEventSource?, token: Int64?) {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: down) else { return }
         event.flags = []                       // never let a held modifier ride along
+        SyntheticEventMarker.mark(event, token: token)
         event.post(tap: .cghidEventTap)
     }
 
-    private static func postUnicode(_ units: inout [UniChar], down: Bool, source: CGEventSource?) {
+    private static func postUnicode(_ units: inout [UniChar], down: Bool, source: CGEventSource?, token: Int64?) {
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: down) else { return }
         event.flags = []
+        SyntheticEventMarker.mark(event, token: token)
         event.keyboardSetUnicodeString(stringLength: units.count, unicodeString: &units)
         event.post(tap: .cghidEventTap)
     }

@@ -4,10 +4,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TART="${FLICKEY_TART_BIN:-/Applications/tart.app/Contents/MacOS/tart}"
-VM="flickey-ui"
-JOB="com.talalfi.flickey-test-vm"
+VM="${FLICKEY_TEST_VM:-flickey-ui}"
+JOB="com.talalfi.flickey-test-vm.${VM}"
 STATE="$ROOT/build/tart"
-VM_LOG="/private/tmp/flickey-tart-vm.log"
+VM_LOG="/private/tmp/flickey-tart-${VM}.log"
 GUEST="/Users/admin/flickey-oss"
 mkdir -p "$STATE/source" "$STATE/results"
 
@@ -38,7 +38,7 @@ case "${1:-status}" in
     start|start-visible)
         mode="$1"
         stage
-        if "$TART" list | grep -E "flickey-ui.*running" >/dev/null; then
+        if "$TART" list | grep -E "${VM}.*running" >/dev/null; then
             echo "VM is already running."
             exit 0
         fi

@@ -83,6 +83,9 @@ final class TypedWordTracker {
 
     // Byte-accurate on-screen text of the current wrong-layout streak.
     var currentRun: String { accumulator.run }
+    // Compared with the pre-delivery tap so a lagging NSEvent callback cannot
+    // cause the edit to omit a physical key that has already reached the app.
+    private(set) var lastInputTimestamp: UInt64 = 0
     // Drop already-committed (correctly-typed) text so the next reconstruction
     // starts at the current streak; `keeping` seeds it with a suffix that still
     // belongs to the new streak.
@@ -127,6 +130,7 @@ final class TypedWordTracker {
     }
 
     func stop() {
+        lastInputTimestamp = 0
         if let m = globalMonitor { NSEvent.removeMonitor(m) }
         if let m = localMonitor { NSEvent.removeMonitor(m) }
         globalMonitor = nil
@@ -138,6 +142,7 @@ final class TypedWordTracker {
     }
 
     private func handle(_ event: NSEvent) {
+        guard !SyntheticEventMarker.isMarked(event) else { return }
         guard !suspended else { return }
         switch event.type {
         case .leftMouseDown, .rightMouseDown, .otherMouseDown:
@@ -145,6 +150,7 @@ final class TypedWordTracker {
             accumulator.reset()
             onRegionBreak?(.click)
         case .keyDown:
+            lastInputTimestamp = event.cgEvent?.timestamp ?? 0
             // A ⌘/⌃ chord is a shortcut, not typing — discard the word and end the
             // run (else the app's own ⇧⇧ fix, whose search path posts ⌘A, would
             // spuriously complete a word mid-correction).

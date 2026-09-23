@@ -122,6 +122,8 @@ targets:
       - path: Sources/TrialReminder.swift
       - path: Sources/WelcomeTour.swift
       - path: Sources/TypedWordTracker.swift
+      - path: Sources/InputHoldQueue.swift
+      - path: Sources/SyntheticEventMarker.swift
       - path: Sources/TypingBuffer.swift
       - path: Sources/WhatsNew.swift
       - path: Sources/WordScript.swift

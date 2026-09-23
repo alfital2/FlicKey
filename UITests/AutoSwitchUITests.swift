@@ -1,4 +1,5 @@
 import XCTest
+import CoreGraphics
 
 // The opt-in automatic correction path, including its explicit user escape
 // hatch and learned exception. This is intentionally one end-to-end story:
@@ -50,7 +51,18 @@ final class AutoSwitchUITests: XCTestCase {
             textEdit.typeKey("a", modifierFlags: .command)
             textEdit.typeKey(.delete, modifierFlags: [])
             forceLatinInputSource()
-            textView.typeText("akuo akuo ")
+            // XCUITest typeText may restore the input source it captured at
+            // the start of its call, undoing a legitimate mid-stream switch.
+            // Physical keycodes exercise the same path as a user's keyboard.
+            let codes: [CGKeyCode] = [0, 40, 32, 31, 49, 0, 40, 32, 31, 49]
+            for code in codes {
+                for down in [true, false] {
+                    let event = CGEvent(keyboardEventSource: nil, virtualKey: code, keyDown: down)
+                    event?.flags = []
+                    event?.post(tap: .cghidEventTap)
+                }
+                RunLoop.current.run(until: Date().addingTimeInterval(0.02))
+            }
         }
         func corrected() -> Bool {
             (textView.value as? String)?.contains("שלום שלום") == true

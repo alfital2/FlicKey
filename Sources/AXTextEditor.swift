@@ -12,6 +12,12 @@ import OSLog
 // took, so a silent no-op can never corrupt text.
 enum AXTextEditor {
 
+    enum RunReplacementResult {
+        case replaced       // exact focused value observed after the AX write
+        case unchanged      // safe to try the keyboard fallback
+        case indeterminate  // a write may have mutated text; never rewrite again
+    }
+
     private static let log = Logger(subsystem: "com.talalfi.FlicKey", category: "conversion")
 
     // The system-wide focused UI element, or nil if there isn't one. Shared by the
@@ -25,6 +31,26 @@ enum AXTextEditor {
             return nil
         }
         return (focused as! AXUIElement)
+    }
+
+    // Web engines can acknowledge AXSelectedText writes before (or without)
+    // committing them to the DOM. Firefox has even replayed the old selection
+    // later, after an immediate AX value check reported no change. Treat any
+    // positively identified web-backed editor as keyboard-only. This is based
+    // on the accessibility hierarchy, never an app/bundle allowlist; unknown
+    // or unreadable hierarchies retain main's broad keyboard fallback.
+    private static func isWebBacked(_ element: AXUIElement) -> Bool {
+        var current = element
+        for _ in 0..<16 {
+            var roleRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(current, kAXRoleAttribute as CFString, &roleRef) == .success,
+               (roleRef as? String) == "AXWebArea" { return true }
+            var parentRef: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parentRef) == .success,
+                  let parent = parentRef, CFGetTypeID(parent) == AXUIElementGetTypeID() else { return false }
+            current = parent as! AXUIElement
+        }
+        return false
     }
 
     // The focused element and its current selected text, or nil if there's no
@@ -122,44 +148,54 @@ enum AXTextEditor {
     }
 
     // Atomically replace the `count` characters immediately before the caret with `text`
-    // via the Accessibility API — no synthetic keystrokes, so it CANNOT collide with the
-    // user's live typing (that's what lets auto-switch fire instantly instead of waiting
-    // for a quiet gap). Selects the run by range, then sets its text. Returns true only if
-    // a re-read confirms it took (native text fields); Electron/web/terminals silently
-    // no-op → false, so the caller uses the synthetic keystroke path (which needs the pause).
-    static func replaceRunBeforeCaret(count: Int, with text: String) -> Bool {
-        guard count > 0, let element = focusedElement() else { return false }
+    // via Accessibility. A successful AX setter is not proof of a text edit:
+    // Firefox, for example, may report success and an empty selected-text
+    // attribute while leaving the actual value unchanged. Compare the COMPLETE
+    // value after the write. Only an unchanged value may take keyboard fallback;
+    // any other unverified mutation fails closed rather than double-writing.
+    static func replaceRunBeforeCaret(count: Int, with text: String) -> RunReplacementResult {
+        guard count > 0, let element = focusedElement() else { return .unchanged }
+        if isWebBacked(element) { return .unchanged }
         // Only fields that expose SETTABLE selected text can take an atomic replace. Check
         // first, before touching anything: apps that can't (Terminal, Electron, web) must
         // be left completely untouched, or moving the selection below becomes a side effect
         // the synthetic fallback then deletes from the wrong place (the stray-char bug).
         var settable: DarwinBoolean = false
         guard AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
-              settable.boolValue else { return false }
+              settable.boolValue else { return .unchanged }
         var rangeRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
-              let originalRange = rangeRef, CFGetTypeID(originalRange) == AXValueGetTypeID() else { return false }
+              let originalRange = rangeRef, CFGetTypeID(originalRange) == AXValueGetTypeID() else { return .unchanged }
         var caret = CFRange()
-        guard AXValueGetValue((originalRange as! AXValue), .cfRange, &caret), caret.location >= 0 else { return false }
+        guard AXValueGetValue((originalRange as! AXValue), .cfRange, &caret), caret.location >= 0 else { return .unchanged }
         let caretU16 = caret.location + caret.length
         var valueRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &valueRef) == .success,
               let value = valueRef as? String,
               let u16 = value.utf16.index(value.utf16.startIndex, offsetBy: caretU16, limitedBy: value.utf16.endIndex),
-              let caretIdx = u16.samePosition(in: value) else { return false }
+              let caretIdx = u16.samePosition(in: value) else { return .unchanged }
         let before = value[value.startIndex..<caretIdx]
-        guard before.count >= count else { return false }
+        guard before.count >= count else { return .unchanged }
         let runU16 = String(before.suffix(count)).utf16.count
-        guard caretU16 >= runU16 else { return false }
+        guard caretU16 >= runU16 else { return .unchanged }
+        let expectedValue = String(before.dropLast(count)) + text + String(value[caretIdx...])
         var sel = CFRange(location: caretU16 - runU16, length: runU16)
         guard let axSel = AXValueCreate(.cfRange, &sel),
               AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, axSel) == .success
-        else { return false }
-        if replaceSelection(element, with: text) { return true }
-        // The set no-op'd after we moved the range — put the caret back so a synthetic
-        // fallback deletes from the right place. Leaves the field exactly as we found it.
-        AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, originalRange)
-        return false
+        else { return .unchanged }
+        _ = AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef)
+        var afterRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &afterRef) == .success,
+              let after = afterRef as? String else { return .indeterminate }
+        if after == expectedValue { return .replaced }
+        if after == value {
+            // No text mutation: restore the original insertion point before
+            // the caller's keyboard fallback sends any Backspaces.
+            guard AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString,
+                                               originalRange) == .success else { return .indeterminate }
+            return .unchanged
+        }
+        return .indeterminate
     }
 
     // Replace the selection with `text`. Returns true ONLY if the set succeeded
