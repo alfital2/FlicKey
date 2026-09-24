@@ -1,23 +1,24 @@
 ## Status
 
-Local `dev` combines the multilingual converter (`7807319`) and global continuous-typing auto-fix (`c20623b`) through merge commit `910898d`. Its code is installed and running on the user's Mac as Developer-ID-signed FlicKey 0.5.6 build 74 at `/Applications/FlicKey.app`; exactly one process was verified and `autoSwitchEnabled` remained 1. Auto-fix remains opt-in/beta; this is a local QA installation, not a release or beta graduation. `main` and remote refs are unchanged.
+Local `dev`'s app code remains at `1fa9d53`, combining multilingual conversion and opt-in continuous-typing auto-fix. FlicKey 0.5.6 build 74 remains the installed host QA app; this session tested fresh builds from `dev` in disposable Tart VMs without changing that installation. Host and Tart unit suites are green, but the live manual TextEdit suite is not, so multilingual UI qualification is incomplete. `main` and remote refs are unchanged.
 
 ## Recent changes
 
-- Merged the continuous-typing input barrier and live auto-fix QA matrix with `dev`'s multilingual converter; kept both the Russian UI test entry point and the auto-fix test entry points when resolving test-runner conflicts.
-- Verified the combined tree: 564 host unit tests passed with zero failures, 2/2 Russian conversion UI tests and 16/16 continuous auto-fix UI tests passed in the disposable `flickey-terminal-qa` Tart VM, and Release configuration compiled (ad-hoc local build only). The VM was stopped afterward.
-- Built the exact merged `dev` code as local QA build 74, signed Sparkle and the app with the same Developer ID as build 73, verified deep signature/bundle/version/hash/no coverage instrumentation, saved build 73 at `build/HostQA/Previous/InstalledBuild73-active.app` (and `InstalledBuild73.app`), installed 74 at the same Applications path, and launched it.
+- Ran the full host suite on the fresh `dev` build: 564 tests, zero failures and skips. Result: `build/DevMultilingualQA-tests-20260924.xcresult`; log: `build/dev-multilingual-host-test.log` from the main workspace root.
+- Ran the full suite in Tart: 564 tests, zero failures and skips after disabling an extra US layout in the disposable `flickey-ui` VM. The independent 16-layout, 4-sample Cartesian test passed, covering 960 directed conversions against macOS `UCKeyTranslate`.
+- Live Tart checks on the exact app source: Russian TextEdit 2/2, Spotlight 2/2, and continuous typing 16/16 on `flickey-terminal-qa` passed. The first `flickey-ui` continuous run was 12/16 because all four Firefox fixture DOM snapshots were empty; those four passed on the other VM, so Firefox coverage remains sensitive to VM state.
+- Manual TextEdit conversion was 3/5 on repeated runs across both VMs. The custom ⌃⌥9 chord left `akuo` unchanged, and selected-word conversion changed the surrounding `left`/`right` text. Diagnostic app/test edits did not resolve these failures and were restored; only this handoff changed. Both VMs were stopped. Tart result bundles and transcripts are under `build/dev-merge-worktree/build/tart/results`.
 
 ## Open questions / blockers
 
-- A user's 135-frame GIF at `/Users/tal/Library/Caches/poof/poof-1790262959645.gif` proves build 73 leaves the initial `a` when clean `akuo akuo ` becomes `aשלום שלום ` in Codex's text UI inside Terminal. The matching 18:15:58 FlicKey log recorded a `tailMutated` rewrite mismatch. Cause is not yet distinguished between a short AX span and a missed synthetic Backspace. The existing VM `vared` test did not cover this TUI; the user accepts this known issue for a beta merge, not for release.
-- The broad VM UI sweep had macOS Accessibility/XCTest stalls and is not green. Mail, ChatGPT desktop, secure native fields, and other editors lack full qualification. Russian layouts with no functional spelling dictionary and IMEs remain limited.
-- Build 74 has not been manually qualified on the host. Do not assume the known Codex-in-Terminal issue is confined to that text UI or fixed by the merge; it is the same auto-fix mechanism.
+- Diagnose the two reproducible TextEdit failures before declaring manual multilingual conversion fully qualified. Selection was verified as exactly `akuo` before the trigger; the app logged an Accessibility conversion, then a later retry converted the whole phrase. The custom shortcut recorded in Settings but did not convert in TextEdit. Neither cause is established.
+- The previously confirmed build 73 Codex-in-Terminal issue (`akuo akuo ` becoming `aשלום שלום `) remains unaddressed in build 74. The broad UI sweep previously stalled on Accessibility/XCTest; other editors, IMEs, and dictionary-limited layouts remain unqualified.
+- Build 74 is a local QA install. No release, push, or beta graduation was authorized or done.
 
 ## Next steps
 
-1. Investigate the confirmed Codex-in-Terminal deletion bug and add a real text-UI fixture; the existing `vared` test is insufficient.
-2. Address the stalled broad UI harness and remaining app coverage before considering beta graduation or release.
-3. Collect host feedback on build 74. Decide separately whether/when to publish local `dev`; do not infer release approval from this beta QA install.
+1. Reproduce and fix the selected-word and custom-chord TextEdit failures with focused live tests, then rerun the five-case manual conversion suite.
+2. Investigate the Codex-in-Terminal deletion issue with a representative fixture and repeat focused continuous typing tests.
+3. Stabilize Firefox and broad UI fixtures, then expand live coverage to additional native layouts and editors before release consideration.
 
 _Last updated: 2026-09-24 by Codex_
