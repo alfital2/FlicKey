@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import CoreGraphics
 import XCTest
 
@@ -62,6 +63,153 @@ final class ContinuousAutoFixUITests: XCTestCase {
         try terminalFixture(expectMidSentenceSwitch: true)
     }
 
+    func testVeryFastTypingIntoTerminalKeepsEveryCharacter() throws {
+        try terminalFixture(expectMidSentenceSwitch: false, interval: 5_000)
+    }
+
+    func testVeryFastTypingIntoTextEditKeepsEveryCharacter() throws {
+        let app = XCUIApplication(bundleIdentifier: "com.apple.TextEdit")
+        app.launchArguments = ["-NSAutomaticCapitalizationEnabled", "NO",
+                               "-NSAutomaticSpellingCorrectionEnabled", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        var field = app.textViews.firstMatch
+        if !field.waitForExistence(timeout: 5) {
+            app.typeKey("n", modifierFlags: .command)
+            field = app.textViews.firstMatch
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.click()
+        postKey(0, flags: .maskCommand)
+        postKey(51)
+        XCTAssertTrue(waitUntil(timeout: 2) { (field.value as? String) == "" })
+        forceLatinInputSource()
+
+        step("TextEdit: 5 ms/key stress burst must preserve the entire sentence")
+        _ = typePhysical(phrase, interval: 5_000)
+        XCTAssertTrue(waitUntil(timeout: 6) { (field.value as? String) == self.expected },
+                      "actual TextEdit text: \(field.value ?? "nil")")
+        XCTAssertEqual(currentInputSourceID(), hebrew)
+    }
+
+    func testHebrewToEnglishCorrectionPreservesFollowingPhysicalKeys() throws {
+        let app = XCUIApplication(bundleIdentifier: "com.apple.TextEdit")
+        app.launchArguments = ["-NSAutomaticCapitalizationEnabled", "NO",
+                               "-NSAutomaticSpellingCorrectionEnabled", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        var field = app.textViews.firstMatch
+        if !field.waitForExistence(timeout: 5) {
+            app.typeKey("n", modifierFlags: .command)
+            field = app.textViews.firstMatch
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.click()
+        postKey(0, flags: .maskCommand)
+        postKey(51)
+        XCTAssertTrue(waitUntil(timeout: 2) { (field.value as? String) == "" })
+        selectInputSource(id: hebrew)
+        XCTAssertTrue(waitForSource(hebrew, 3))
+
+        step("Hebrew-PC keys for hello hello hello must correct to English")
+        _ = typePhysical("hello hello hello ", interval: 20_000)
+        XCTAssertTrue(waitUntil(timeout: 6) { (field.value as? String) == "hello hello hello " },
+                      "actual TextEdit text: \(field.value ?? "nil")")
+        XCTAssertTrue([abc, "com.apple.keylayout.US"].contains(currentInputSourceID()),
+                      "the target must be an enabled English layout, got \(currentInputSourceID())")
+    }
+
+    func testValidEnglishDoesNotAutoCorrect() throws {
+        let app = XCUIApplication(bundleIdentifier: "com.apple.TextEdit")
+        app.launchArguments = ["-NSAutomaticCapitalizationEnabled", "NO",
+                               "-NSAutomaticSpellingCorrectionEnabled", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        var field = app.textViews.firstMatch
+        if !field.waitForExistence(timeout: 5) {
+            app.typeKey("n", modifierFlags: .command)
+            field = app.textViews.firstMatch
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.click()
+        postKey(0, flags: .maskCommand)
+        postKey(51)
+        XCTAssertTrue(waitUntil(timeout: 2) { (field.value as? String) == "" })
+        forceLatinInputSource()
+
+        step("Valid English must stay exactly as typed, without switching layouts")
+        _ = typePhysical("hello there ", interval: 20_000)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertEqual(field.value as? String, "hello there ")
+        XCTAssertEqual(currentInputSourceID(), abc)
+    }
+
+    func testSafariPasswordFieldIsNeverRewritten() throws {
+        try passwordFieldFixture("com.apple.Safari")
+    }
+
+    func testFirefoxPasswordFieldIsNeverRewritten() throws {
+        try passwordFieldFixture("org.mozilla.firefox")
+    }
+
+    private func passwordFieldFixture(_ bundleID: String) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flickey-password-qa-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let page = directory.appendingPathComponent("password.html")
+        try """
+        <html><head><meta charset="utf-8"><title>FlicKey password QA</title></head><body>
+        <input id="draft" type="password" aria-label="QA password" autocomplete="off"
+               autocorrect="off" autocapitalize="off" spellcheck="false">
+        <textarea id="snapshot" aria-label="QA DOM snapshot" readonly></textarea>
+        <script>
+        const draft = document.getElementById('draft');
+        draft.addEventListener('input', () => {
+          document.getElementById('snapshot').value = draft.value;
+        });
+        </script></body></html>
+        """.write(to: page, atomically: true, encoding: .utf8)
+        let browser = XCUIApplication(bundleIdentifier: bundleID)
+        browser.launchArguments = bundleID == "org.mozilla.firefox"
+            ? ["-no-remote", "-profile", directory.path]
+            : ["-ApplePersistenceIgnoreState", "YES"]
+        if bundleID == "org.mozilla.firefox" {
+            try """
+            user_pref("app.update.auto", false);
+            user_pref("browser.shell.checkDefaultBrowser", false);
+            user_pref("browser.startup.homepage_override.mstone", "ignore");
+            user_pref("browser.startup.page", 0);
+            user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+            """.write(to: directory.appendingPathComponent("user.js"), atomically: true, encoding: .utf8)
+        }
+        browser.launch()
+        defer { browser.terminate() }
+        browser.typeKey("l", modifierFlags: .command)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(page.absoluteString, forType: .string)
+        browser.typeKey("v", modifierFlags: .command)
+        browser.typeText("\n")
+        if bundleID == "com.apple.Safari" {
+            let button = browser.sheets.buttons["Open"]
+            if button.waitForExistence(timeout: 2) { button.click() }
+        }
+        let field = browser.secureTextFields["QA password"]
+        XCTAssertTrue(field.waitForExistence(timeout: 8), "local password fixture did not load")
+        field.click()
+        forceLatinInputSource()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+
+        step("\(bundleID): never rewrite or switch source in a password field")
+        _ = typePhysical("akuo akuo ", interval: 20_000)
+        let snapshot = browser.textViews["QA DOM snapshot"]
+        XCTAssertTrue(waitUntil(timeout: 3) { (snapshot.value as? String) == "akuo akuo " },
+                      "actual password fixture DOM: \(snapshot.value ?? "nil")")
+        RunLoop.current.run(until: Date().addingTimeInterval(0.4))
+        XCTAssertEqual(snapshot.value as? String, "akuo akuo ")
+        XCTAssertEqual(currentInputSourceID(), abc)
+    }
+
     func testTerminalStillCorrectsWithoutInputBarrier() throws {
         flickey.terminate()
         flickey.launchArguments.append("-uiTestDisableInputBarrier")
@@ -70,7 +218,8 @@ final class ContinuousAutoFixUITests: XCTestCase {
         try terminalFixture(expectMidSentenceSwitch: false)
     }
 
-    private func terminalFixture(expectMidSentenceSwitch: Bool) throws {
+    private func terminalFixture(expectMidSentenceSwitch: Bool,
+                                 interval: useconds_t = 20_000) throws {
         let terminal = XCUIApplication(bundleIdentifier: "com.apple.Terminal")
         terminal.launch()
         defer { terminal.terminate() }
@@ -101,7 +250,7 @@ final class ContinuousAutoFixUITests: XCTestCase {
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
 
         step("Terminal: type continuously through the AX-unavailable keyboard fallback")
-        let switchedMidSentence = typePhysical(phrase, interval: 20_000)
+        let switchedMidSentence = typePhysical(phrase, interval: interval)
         XCTAssertTrue(waitForSource(hebrew, 5), "Terminal should switch before the sentence ends")
         postKey(36) // submits vared's buffer; never executes typed text
         XCTAssertTrue(waitUntil(timeout: 5) { FileManager.default.fileExists(atPath: result.path) })
@@ -125,6 +274,156 @@ final class ContinuousAutoFixUITests: XCTestCase {
 
     func testFirefoxContentEditablePreservesContinuousTyping() throws {
         try browserFixture("org.mozilla.firefox", contentEditable: true)
+    }
+
+    func testSafariTwoTabsKeepIndependentCorrections() throws {
+        try browserTabFixture("com.apple.Safari")
+    }
+
+    func testFirefoxTwoTabsKeepIndependentCorrections() throws {
+        try browserTabFixture("org.mozilla.firefox")
+    }
+
+    // A tab change must not make the rewrite address the wrong document. Both
+    // tabs receive real-key bursts and are inspected again after leaving them.
+    private func browserTabFixture(_ bundleID: String) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("flickey-tab-qa-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        func page(_ label: String, editable: Bool) throws -> URL {
+            let editor = editable
+                ? "<div id='draft' contenteditable='true' aria-label='QA draft \(label)' style='width:600px;height:200px;border:1px solid black' spellcheck='false'></div>"
+                : "<textarea id='draft' aria-label='QA draft \(label)' rows='12' cols='60' autocomplete='off' autocorrect='off' autocapitalize='off' spellcheck='false'></textarea>"
+            let html = """
+            <html><head><meta charset="utf-8"><title>FlicKey tab \(label)</title></head><body>
+            \(editor)
+            <textarea id="snapshot" aria-label="QA DOM snapshot \(label)" readonly></textarea>
+            <script>
+            const draft = document.getElementById('draft');
+            draft.addEventListener('input', () => {
+              document.getElementById('snapshot').value = draft.isContentEditable ? draft.textContent : draft.value;
+            });
+            </script></body></html>
+            """
+            let url = directory.appendingPathComponent("\(label).html")
+            try html.write(to: url, atomically: true, encoding: .utf8)
+            return url
+        }
+        let first = try page("first", editable: false)
+        let second = try page("second", editable: true)
+        let browser = XCUIApplication(bundleIdentifier: bundleID)
+        browser.launchArguments = bundleID == "org.mozilla.firefox"
+            ? ["-no-remote", "-profile", directory.path]
+            : ["-ApplePersistenceIgnoreState", "YES"]
+        if bundleID == "org.mozilla.firefox" {
+            try """
+            user_pref("app.update.auto", false);
+            user_pref("browser.shell.checkDefaultBrowser", false);
+            user_pref("browser.startup.homepage_override.mstone", "ignore");
+            user_pref("browser.startup.page", 0);
+            user_pref("datareporting.policy.dataSubmissionPolicyBypassNotification", true);
+            """.write(to: directory.appendingPathComponent("user.js"), atomically: true, encoding: .utf8)
+        }
+        browser.launch()
+        defer { browser.terminate() }
+
+        func open(_ url: URL, label: String) {
+            browser.activate()
+            // Character-based XCUI shortcuts can resolve against the active
+            // Hebrew source after the preceding tab auto-corrects.
+            if currentInputSourceID() == abc {
+                browser.typeKey("l", modifierFlags: .command)
+            } else {
+                postPhysicalShortcut(keyCode: 37, flags: .maskCommand) // ⌘L
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(url.absoluteString, forType: .string)
+            if currentInputSourceID() == abc {
+                browser.typeKey("v", modifierFlags: .command)
+            } else {
+                postPhysicalShortcut(keyCode: 9, flags: .maskCommand) // ⌘V
+            }
+            browser.typeText("\n")
+            if bundleID == "com.apple.Safari" {
+                let button = browser.sheets.buttons["Open"]
+                if button.waitForExistence(timeout: 2) { button.click() }
+            }
+            XCTAssertTrue(browser.textViews["QA draft \(label)"].waitForExistence(timeout: 8),
+                          "\(label) tab failed to load")
+        }
+        func assertText(_ label: String) {
+            let snapshot = browser.textViews["QA DOM snapshot \(label)"]
+            XCTAssertTrue(waitUntil(timeout: 6) {
+                (snapshot.value as? String)?.replacingOccurrences(of: "\u{00A0}", with: " ") == self.expected
+            }, "\(label) actual DOM text: \(snapshot.value ?? "nil")")
+        }
+
+        step("\(bundleID): correct first tab's textarea")
+        open(first, label: "first")
+        browser.textViews["QA draft first"].click()
+        forceLatinInputSource()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertTrue(typePhysical(phrase, interval: 20_000), "first tab must switch mid-sentence")
+        assertText("first")
+
+        step("\(bundleID): open second tab and correct its independent contenteditable")
+        postPhysicalShortcut(keyCode: 17, flags: .maskCommand) // ⌘T
+        open(second, label: "second")
+        browser.textViews["QA draft second"].click()
+        forceLatinInputSource()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.5))
+        XCTAssertTrue(typePhysical(phrase, interval: 20_000), "second tab must switch mid-sentence")
+        assertText("second")
+
+        step("\(bundleID): return to first tab, then second; neither text may be corrupted")
+        postPhysicalShortcut(keyCode: 48, flags: [.maskControl, .maskShift]) // previous tab
+        XCTAssertTrue(browser.textViews["QA draft first"].waitForExistence(timeout: 5))
+        assertText("first")
+        postPhysicalShortcut(keyCode: 48, flags: .maskControl) // next tab
+        XCTAssertTrue(browser.textViews["QA draft second"].waitForExistence(timeout: 5))
+        assertText("second")
+    }
+
+    func testRussianAsThirdEnabledLayoutTargetsRussianNotHebrew() throws {
+        let russian = "com.apple.keylayout.Russian"
+        guard let sources = TISCreateInputSourceList(nil, true)?.takeRetainedValue() as? [TISInputSource],
+              let source = sources.first(where: {
+                  guard let pointer = TISGetInputSourceProperty($0, kTISPropertyInputSourceID) else { return false }
+                  return Unmanaged<CFString>.fromOpaque(pointer).takeUnretainedValue() as String == russian
+              }) else {
+            XCTFail("Russian layout absent from provisioned VM")
+            return
+        }
+        XCTAssertEqual(TISEnableInputSource(source), noErr)
+        defer { _ = TISDisableInputSource(source); forceLatinInputSource() }
+        flickey.terminate()
+        flickey.launch()
+        RunLoop.current.run(until: Date().addingTimeInterval(1))
+
+        let app = XCUIApplication(bundleIdentifier: "com.apple.TextEdit")
+        app.launchArguments = ["-NSAutomaticCapitalizationEnabled", "NO",
+                               "-NSAutomaticSpellingCorrectionEnabled", "NO"]
+        app.launch()
+        defer { app.terminate() }
+        var field = app.textViews.firstMatch
+        if !field.waitForExistence(timeout: 5) {
+            app.typeKey("n", modifierFlags: .command)
+            field = app.textViews.firstMatch
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.click()
+        postKey(0, flags: .maskCommand)
+        postKey(51)
+        XCTAssertTrue(waitUntil(timeout: 2) { (field.value as? String) == "" })
+        forceLatinInputSource()
+
+        step("Three enabled layouts: ABC keys ghbdtn must become Russian привет")
+        let raw = "ghbdtn ghbdtn ghbdtn "
+        _ = typePhysical(raw, interval: 20_000)
+        XCTAssertTrue(waitUntil(timeout: 6) { (field.value as? String) == "привет привет привет " },
+                      "actual TextEdit text: \(field.value ?? "nil")")
+        XCTAssertEqual(currentInputSourceID(), russian)
     }
 
     private func browserFixture(_ bundleID: String, contentEditable: Bool) throws {
@@ -196,8 +495,9 @@ final class ContinuousAutoFixUITests: XCTestCase {
     @discardableResult
     private func typePhysical(_ text: String, interval: useconds_t) -> Bool {
         let codes: [Character: CGKeyCode] = [
-            "a": 0, "b": 11, "c": 8, "f": 3, "g": 5, "h": 4, "k": 40, "o": 31,
-            "t": 17, "u": 32, "v": 9, ",": 43, " ": 49,
+            "a": 0, "b": 11, "c": 8, "d": 2, "e": 14, "f": 3, "g": 5,
+            "h": 4, "k": 40, "l": 37, "n": 45, "o": 31, "r": 15, "t": 17,
+            "u": 32, "v": 9, ",": 43, " ": 49,
         ]
         var midSentenceSwitch = false
         for (index, character) in text.enumerated() {

@@ -339,7 +339,17 @@ final class AutoSwitchController {
             return
         }
         var replayLayout: LayoutMap?
-        defer { if protected { inputBarrier.finish(layout: replayLayout) } }
+        defer {
+            if protected {
+                // TIS reports a selected source before the focused app always
+                // starts interpreting fresh key events through it. Keep the
+                // physical-key hold across that notification handoff; otherwise
+                // the first post-fix key can land in the old script (seen as
+                // "אנh" in Firefox). Held keys replay with replayLayout below.
+                if replayLayout != nil { Thread.sleep(forTimeInterval: 0.06) }
+                inputBarrier.finish(layout: replayLayout)
+            }
+        }
 
         #if DEBUG
         // Deterministic overlap in the isolated UI VM: physical keys posted
@@ -371,7 +381,10 @@ final class AutoSwitchController {
             if let switchTo = result.targetSourceID {
                 suppressCue?()
                 InputSourceManager.switchTo(sourceID: switchTo)
-                if protected && InputSourceManager.currentSourceID() == switchTo {
+                // The destination app can lag the TIS selection notification.
+                // Keys already held by the barrier belong to the NEW layout
+                // even if currentSourceID() still reports the old one here.
+                if protected {
                     replayLayout = LayoutMap.forSource(switchTo)
                 }
             }
@@ -399,8 +412,7 @@ final class AutoSwitchController {
         rewrite(deleteCount: span.count, type: result.converted,
                 switchTo: result.targetSourceID, paced: false, protected: protected,
                 expectedResidue: span.before.map { String($0.dropLast(span.count)) + result.converted })
-        if let switchTo = result.targetSourceID,
-           protected && InputSourceManager.currentSourceID() == switchTo {
+        if let switchTo = result.targetSourceID, protected {
             replayLayout = LayoutMap.forSource(switchTo)
         }
         finishFire(run: run, target: target, converted: result.converted, previous: previous)

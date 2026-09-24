@@ -1,24 +1,23 @@
 ## Status
 
-`fix/auto-fix-global-retry` (implementation commit `ca7d6d4`) remains isolated from `main` and other dirty worktrees. Its auto-fix change passed 530 unit tests and 8 isolated-VM live UI tests. A locally signed Release QA build with overridden build number 72 is now installed and running at `/Applications/FlicKey.app`; the previous installed build 60 is preserved under this worktree's `build/HostQA/Previous/`. FlicKey currently shows an Accessibility Access Required alert, so the new host install has not yet been proven functional in the user's apps. It has not been merged.
+`fix/auto-fix-global-retry` remains isolated from `main` and other worktrees. This session expanded the release-gate matrix and fixed a reproduced one-character Firefox layout-handoff race. Final focused results in the dedicated `flickey-terminal-qa` VM: 32/32 live auto-fix matrix passes (16 cases × 2), 10/10 extra Firefox two-tab race trials, 535 unit tests with 0 failures (8 environment skips), manual conversion 3/3, Spotlight 2/2, app switching 2/2, and undo/learned-block 1/1. The production Release configuration builds. The dedicated VM is stopped; host QA build 72 is unchanged and predates this fix. Do not promote from beta yet.
 
 ## Recent changes
 
-- Built this branch as local Release QA build 72 with the existing Developer ID identity; strict deep signature verification passed, and the installed binary's SHA-256 and CDHash match the built product.
-- Made a verified recoverable copy of installed build 60, then moved the old app to `build/HostQA/Previous/InstalledOriginal.app` before installing build 72 at `/Applications/FlicKey.app`.
-- Gracefully closed the older FlicKey processes. Verified exactly one FlicKey process running, from `/Applications/FlicKey.app` (build 72); did not alter the other session's `flickey-ui` VM.
-- Inspected the launched app UI: it shows an Accessibility Access Required alert. No Accessibility/TCC permission was granted or changed in this session.
+- Added real-key Safari/Firefox two-tab isolation, Hebrew-PC→English, Russian amid multiple enabled layouts, 5 ms/key TextEdit/Terminal stress, valid-English no-conversion, and Safari/Firefox password-field non-mutation. Exact destination text/DOM and source are asserted, with focused Tart runners and repeat-count support.
+- The new Firefox tab fixture reproduced `אנh` in otherwise-correct Hebrew. Protected replay now maps held keys to the target layout and holds them for a 60 ms TIS-to-app handoff. The focused 10/10 Firefox trials and final 32/32 combined matrix passed after this fix.
+- Corrected test-only assumptions: reverse-direction accepts either enabled English layout (`US`/`ABC`); the Caps Lock lookup assertion matches the host/VM ABC table; app-switching fixtures disable normal first-visit auto-remember. This isolates genuine no-rule preservation without changing normal production behavior.
 
 ## Open questions / blockers
 
-- User action or explicit approval is needed to enable FlicKey in System Settings › Privacy & Security › Accessibility; auto-fix cannot be meaningfully tested on the host while that alert is present.
-- Apple Mail compose and the host ChatGPT app are still untested. The eight VM fixtures are not proof of universal app compatibility.
-- This is a locally signed, unnotarized QA build, not a distributable release. The build number 72 was an Xcode build-setting override, not a source version change.
+- The broad default UI sweep is not green: it had a stale unforced-app fixture (now corrected and passing alone), an undo test invalidated by a 61-second XCTest AX query stall (passing alone), then Safari AX snapshot calls timed out repeatedly for >5 minutes. It was gracefully stopped; a fresh-VM focused matrix did not reproduce the AX stalls. The broad sweep has not been rerun to completion.
+- These are finite offline fixtures, not universal macOS proof. Apple Mail, ChatGPT desktop, Chrome, secure native fields, and many third-party editors remain untested on this version. The 60 ms handoff may warrant a subjective latency check. Host QA build 72 does not include this session's fix and previously showed an Accessibility Access Required alert.
+- Host Apple Mail and ChatGPT app remain outside this VM matrix unless available as disposable, privacy-safe fixtures; the installed host build 72 still had an Accessibility Access Required alert at last check.
 
 ## Next steps
 
-1. Have the user enable Accessibility for the installed FlicKey, or obtain explicit approval before doing it through the UI; verify the alert clears and auto-fix is enabled in the app's settings.
-2. Let the user test build 72 in the apps that previously failed; if authorized, run controlled tests in temporary Mail/ChatGPT fields without inspecting existing private content.
-3. Review the branch against concurrent work and run the remaining release/QA matrix before merging. To restore build 60, first quit build 72 and move the preserved app back to `/Applications/FlicKey.app`.
+1. Review the branch changes and this QA evidence; rerun the broad UI sweep only after addressing the VM AX timeout/harness issue, not by waiving failures.
+2. If a new signed host QA build is desired, build and install from this branch only with appropriate approval, verify Accessibility trust, then test Apple Mail/ChatGPT and subjective handoff latency with the user. Build 72 is stale.
+3. Keep the feature opt-in/beta until the remaining app and harness coverage is acceptable; merge/promote only after that decision.
 
 _Last updated: 2026-09-24 by Codex_

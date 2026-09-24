@@ -39,6 +39,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // UI tests: seed per-site memory into the (isolated) store. Value form:
         //   "domain=sourceID;domain=sourceID"
         let args = ProcessInfo.processInfo.arguments
+        if UITestMode.isActive && args.contains("-uiTestDisableRememberVisitedApps") {
+            // App-routing fixtures need genuinely unlisted apps. The normal
+            // default learns a rule on first visit, which invalidates their
+            // "no rule" premise even in an otherwise reset test store.
+            RulesStore.setRememberVisitedAppsEnabled(false)
+        }
         #if DEBUG
         Entitlement.applyDebugOverride(from: args)   // -simulateExpired etc.
         #endif

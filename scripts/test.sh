@@ -20,6 +20,12 @@
 #   conversion   wrong-layout fix (layout conversion / round-trips)
 #   fix-ui       LIVE: types gibberish in TextEdit, ⇧⇧, asserts it converts
 #                (part of the default UI run too)
+#   continuous-ui LIVE: auto-fix across native fields, browser tabs, and layouts
+#   continuous-tabs-ui LIVE: focused Safari/Firefox multi-tab correction gate
+#   continuous-firefox-tab-ui LIVE: repeatable Firefox race regression gate
+#   continuous-safety-ui LIVE: valid text and password fields are untouched
+#   auto-switch-ui LIVE: correction, undo, and learned-block story
+#   app-switching-ui LIVE: forced/unforced app layout transitions
 #   spotlight-ui LIVE: validates physical typing and conversion in Spotlight
 #   core         the shared decision engine
 #   routing      app-activation routing + app rules
@@ -51,6 +57,12 @@ u() { UI+=("-only-testing:FlicKeyUITests/$1"); }
 
 WHOLE_UNIT=0   # run the entire unit scheme
 WHOLE_UI=0     # run the entire UI scheme
+if [[ -n "${FLICKEY_TEST_ITERATIONS:-}" ]]; then
+  if [[ ! "$FLICKEY_TEST_ITERATIONS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "FLICKEY_TEST_ITERATIONS must be a positive integer" >&2
+    exit 2
+  fi
+fi
 
 case "$COMPONENT" in
   smoke)
@@ -78,6 +90,21 @@ case "$COMPONENT" in
     t ConversionEngineTests; t LayoutConverterTests; t RoundTripTests ;;
   fix-ui)
     u HotkeyConversionUITests ;;   # LIVE: the ⇧⇧ fix in TextEdit (controls screen)
+  continuous-ui)
+    u ContinuousAutoFixUITests ;;
+  continuous-tabs-ui)
+    u ContinuousAutoFixUITests/testSafariTwoTabsKeepIndependentCorrections
+    u ContinuousAutoFixUITests/testFirefoxTwoTabsKeepIndependentCorrections ;;
+  continuous-firefox-tab-ui)
+    u ContinuousAutoFixUITests/testFirefoxTwoTabsKeepIndependentCorrections ;;
+  continuous-safety-ui)
+    u ContinuousAutoFixUITests/testValidEnglishDoesNotAutoCorrect
+    u ContinuousAutoFixUITests/testSafariPasswordFieldIsNeverRewritten
+    u ContinuousAutoFixUITests/testFirefoxPasswordFieldIsNeverRewritten ;;
+  auto-switch-ui)
+    u AutoSwitchUITests ;;
+  app-switching-ui)
+    u AppSwitchingUITests ;;
   spotlight-ui)
     u SpotlightTypingRigUITests; u SpotlightConversionUITests ;;
   core)
@@ -110,7 +137,7 @@ case "$COMPONENT" in
     WHOLE_UNIT=1; WHOLE_UI=1 ;;
   *)
     echo "Unknown component: '$COMPONENT'"
-    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
+    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui continuous-ui continuous-tabs-ui continuous-firefox-tab-ui continuous-safety-ui auto-switch-ui app-switching-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
     exit 2 ;;
 esac
 
@@ -138,8 +165,13 @@ run() {   # run <scheme> <args...>
   # Show pass/fail + the live "STEP ▸" narration each test emits (cleaned to a
   # plain "▸ doing X"); also save it to the transcript file + an .xcresult bundle.
   local run_log="build/${scheme}.log"
-  xcodebuild test -project FlicKey.xcodeproj -scheme "$scheme" -destination 'platform=macOS' \
-    -resultBundlePath "$bundle" "${test_signing[@]}" "$@" \
+  local xcode_args=(test -project FlicKey.xcodeproj -scheme "$scheme"
+    -destination 'platform=macOS' -resultBundlePath "$bundle" "${test_signing[@]}")
+  if [[ -n "${FLICKEY_TEST_ITERATIONS:-}" ]]; then
+    xcode_args+=(-test-iterations "$FLICKEY_TEST_ITERATIONS")
+  fi
+  xcode_args+=("$@")
+  xcodebuild "${xcode_args[@]}" \
     2>&1 | tee "$run_log" | grep -iE "$filter|Test Case .* skipped" | sed -E 's/.*STEP ▸ /   ▸ /' | tee -a "$TRANSCRIPT"
   local s=${PIPESTATUS[0]}
   [ "$s" -ne 0 ] && overall=1

@@ -45,6 +45,7 @@ final class AppSwitchingUITests: XCTestCase {
         step("Seed rules: TextEdit → \(other), Calculator → \(latin); launch everything")
         flickey.launchArguments = [
             "-uiTestReset",
+            "-uiTestDisableRememberVisitedApps",
             "-uiTestSeedAppRules", "TextEdit=\(other);Calculator=\(latin)",
         ]
         flickey.launch()
@@ -71,7 +72,7 @@ final class AppSwitchingUITests: XCTestCase {
     // user's layout alone, both when hopping away and when coming back.
     func testUnforcedAppsPreserveTheUsersLayout() {
         step("No rules seeded; launch everything")
-        flickey.launchArguments = ["-uiTestReset"]
+        flickey.launchArguments = ["-uiTestReset", "-uiTestDisableRememberVisitedApps"]
         flickey.launch()
         textEdit.launch()
         calculator.launch()

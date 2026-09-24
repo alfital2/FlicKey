@@ -61,6 +61,8 @@ final class InputHoldQueueTests: XCTestCase {
         let abc = try XCTUnwrap(LayoutMap.forSource("com.apple.keylayout.ABC"))
         XCTAssertEqual(abc.character(forKeyCode: 0, shift: false), "a")
         XCTAssertEqual(abc.character(forKeyCode: 0, shift: false, capsLock: true), "A")
-        XCTAssertEqual(abc.character(forKeyCode: 0, shift: true, capsLock: true), "a")
+        // ABC's UCKeyTranslate table on current macOS returns uppercase for
+        // Shift+Caps Lock too; it is not safe to assume the modifiers invert.
+        XCTAssertEqual(abc.character(forKeyCode: 0, shift: true, capsLock: true), "A")
     }
 }
