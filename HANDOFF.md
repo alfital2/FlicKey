@@ -1,23 +1,23 @@
 ## Status
 
-`feat/multilingual-layouts` is a committed feature branch created directly from `main` at `4d1f6ff`, with its clean worktree at `build/multilingual-main-worktree`. It carries the multilingual conversion/manual-shortcut work without the newer continuous-typing auto-fix changes. All 559 host tests passed. Tart live TextEdit tests passed (five existing Hebrew/shortcut cases and two new Russian cases). The Spotlight conversion test passed twice. The separate Spotlight typing-rig test failed once in an earlier run, passed on rerun, and then passed 50 of 50 sequential repetitions with a fresh test runner each time. Main and the user's running app remain unchanged. The root worktree remains on `fix/auto-fix-continuous-typing` with pre-existing uncommitted combined changes.
+The local `dev` branch now includes the multilingual keyboard-layout conversion work via a fast-forward from `f660592` to `feat/multilingual-layouts` at `7807319`; it also includes the intervening main commits because `dev` was an ancestor. The code tree was the tested feature tree: 559 host tests passed, five existing TextEdit Tart tests passed, two Russian TextEdit Tart tests passed twice, and the Spotlight typing-rig passed 50 of 50 repetitions after one earlier transient failure. `main` and the user's running app remain unchanged. The root worktree is still on `fix/auto-fix-continuous-typing` with its pre-existing uncommitted combined changes; the local `dev` worktree is `build/dev-merge-worktree`.
 
 ## Recent changes
 
-- Repeated only `SpotlightTypingRigUITests.testSpotlightAcceptsLatinThenClearsThenAcceptsHebrew` 50 times in the Tart VM with test-runner relaunch between attempts to measure the previously observed failure.
-- All 50 runs passed with zero failures or skips. The saved Xcode result confirms 50 repetitions; the per-run log shows mean 3.535 seconds, median 3.494 seconds, and range 3.253–4.687 seconds.
-- Saved the result at `build/multilingual-main-worktree/build/tart/results/SpotlightRig50-20260924.xcresult` and the raw log at `build/multilingual-main-worktree/build/spotlight-rig-50.log`; stopped the Tart VM afterward.
+- Fast-forwarded local `dev` to the tested multilingual branch without conflicts, preserving the separate continuous-typing work.
+- Confirmed `dev` was an ancestor of the feature branch, so the merge produced the exact previously tested code tree and did not need a duplicate test run.
+- Kept the Russian Tart UI tests and 50-run Spotlight evidence in the merged branch. The 50-run report is at `build/multilingual-main-worktree/build/tart/results/SpotlightRig50-20260924.xcresult`.
 
 ## Open questions / blockers
 
-- The earlier single Spotlight first-key transition failure remains unexplained. A clean 50-run batch lowers concern but does not prove the race impossible or establish its frequency across other machines.
-- Live UI coverage includes TextEdit and Spotlight but not Russian in browsers or other editors. Prior review also identified possible manual-edit risks around stale on-screen text and fixed monitor-resume timing.
-- Some layouts lack functional macOS spell-check dictionaries; text-only reconstruction cannot resolve every lost physical-key distinction. IMEs remain outside the verified scope.
+- The earlier Spotlight first-key transition failure remains unexplained despite the subsequent 50/50 passing run. Russian UI coverage still needs common browser and editor fields before a broad compatibility claim.
+- Some layouts lack functional macOS spell-check dictionaries; text-only reconstruction cannot resolve every lost key distinction. IMEs remain outside verified scope.
+- `dev` is a local branch only; there is no `origin/dev` ref, and no push, release, or installation was performed.
 
 ## Next steps
 
-1. Investigate the earlier Spotlight first-key transition if it recurs, retaining both the failing transcript and the clean 50-run report.
-2. Expand live qualification to Russian in other common editors and browser fields, then rerun the relevant UI suites.
-3. Review and merge the multilingual branch separately from continuous-typing work when ready.
+1. Investigate the Spotlight transition issue if it recurs and expand Russian live-editor qualification.
+2. Review the multilingual feature on `dev` before any release or remote publication.
+3. Keep the continuous-typing auto-fix work separate until its own browser/editor QA is resolved.
 
 _Last updated: 2026-09-24 by GPT-6 / Codex_
