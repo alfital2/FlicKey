@@ -21,6 +21,7 @@ final class AutoSwitchController {
     var suppressCue: (() -> Void)?
 
     private let tracker = TypedWordTracker()
+    private let inputBarrier = PhysicalInputBarrier()
     private let classifier = WrongLayoutClassifier(
         spellChecker: SystemSpellChecker(),
         candidates: { LayoutConverter.candidates($0) })
@@ -44,17 +45,16 @@ final class AutoSwitchController {
     // an undo's own rewrite can't be mistaken for this fix surviving.
     private var pendingApproval: (words: [String], generation: Int)?
 
-    // Fire only after a genuine quiet gap, on a WORD boundary. FlicKey's monitor is passive
-    // — it cannot hold the user's keystrokes back — so firing while they are still typing
-    // makes the synthetic rewrite collide with real keys (garbled text, seen badly in
-    // Finder's type-ahead). A pending fire is scheduled only when a word completes, and the
-    // very next keystroke cancels it, so it goes off ONLY when typing has actually paused;
-    // under continuous typing it just defers to the natural pause — no mid-word, no
-    // collision. (A confidently wrong run stays armed until that pause; b23's ambiguous
-    // riding means an intended-word boundary no longer kills it.)
+    // With the physical-input barrier, fire shortly after the second word and
+    // queue keys arriving during the edit. If the tap cannot be installed or a
+    // tracker snapshot repeatedly lags it, keep main's 150 ms quiet-gap path.
+    // Neither path requires an AX-readable focused element: unsupported fields
+    // still get the same keyboard fallback as on main.
     private var pendingFire: DispatchWorkItem?
     private var pendingFireSignal: SlipSignal = .misspelled   // the firing word's evidence
     private static let fireQuietGap: TimeInterval = 0.15
+    private static let protectedFireDelay: TimeInterval = 0.012
+    private var protectionMisses = 0
 
     // Consecutive carried near-miss words (flagged as slips but with no valid swap) since
     // the last confident/ambiguous word. A confident wrong-layout run tolerates a few —
@@ -133,6 +133,7 @@ final class AutoSwitchController {
 
     func stop() {
         started = false
+        inputBarrier.stop()
         tracker.stop()
         AutoSwitchMonitorHealth.set(.inactive)
         streak.breakRun()
@@ -140,6 +141,7 @@ final class AutoSwitchController {
         disarmFire()
         pendingUndo = nil
         pendingApproval = nil
+        protectionMisses = 0
     }
 
     // Called at start and again on event-driven Accessibility checks if monitor
@@ -148,10 +150,22 @@ final class AutoSwitchController {
         guard started, AutoSwitchSettings.isEnabled else { return }
         guard AccessibilityAccess.isTrusted else {
             tracker.stop()
+            inputBarrier.stop()
             AutoSwitchMonitorHealth.set(.unavailable(.accessibilityDenied))
             return
         }
         let active = tracker.start()
+        // Failure to create this optional tap must not disable main's existing
+        // cross-app correction. It simply retains the quiet-gap schedule.
+        if active {
+            #if DEBUG
+            let disabledForUITest = UITestMode.isActive &&
+                ProcessInfo.processInfo.arguments.contains("-uiTestDisableInputBarrier")
+            if !disabledForUITest { _ = inputBarrier.start() }
+            #else
+            _ = inputBarrier.start()
+            #endif
+        }
         AutoSwitchMonitorHealth.set(active ? .available : .unavailable(.monitorCreationFailed))
     }
 
@@ -245,6 +259,7 @@ final class AutoSwitchController {
     // reconstruction run, and disarms any pending fire.
     private func endRun() {
         carriedOpaque = 0
+        protectionMisses = 0
         _ = streak.word(.ordinary)
         tracker.resetRun()
         disarmFire()
@@ -278,11 +293,13 @@ final class AutoSwitchController {
     // Schedule the fire one quiet gap out. Called only from a completed word; the next
     // keystroke cancels it (see onInput), so it fires only if typing has genuinely paused.
     private func armFire() {
-        SoundEffect.warm()   // the fire clicks ≥150ms from now; wake the audio path
+        SoundEffect.warm()
         pendingFire?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.fire() }
         pendingFire = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.fireQuietGap, execute: work)
+        let delay = inputBarrier.isActive && protectionMisses < 3
+            ? Self.protectedFireDelay : Self.fireQuietGap
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func rescheduleFireIfPending() { if pendingFire != nil { armFire() } }
@@ -290,7 +307,6 @@ final class AutoSwitchController {
 
     private func fire() {
         pendingFire = nil
-        carriedOpaque = 0
         // Never mutate a secure/password field (secure input is on while one is focused).
         guard !IsSecureEventInputEnabled() else { streak.breakRun(); tracker.resetRun(); return }
         // A mouse button held right now means a click is in flight whose monitor
@@ -313,6 +329,38 @@ final class AutoSwitchController {
               !result.converted.isEmpty
         else { streak.breakRun(); tracker.resetRun(); return }
 
+        // The event tap sees a key before NSEvent. If that key has not reached
+        // the tracker yet, retry against the newer run instead of rewriting an
+        // incomplete snapshot. Three misses revert to the original quiet gap.
+        let protected = inputBarrier.isActive && protectionMisses < 3
+        if protected && !inputBarrier.begin(after: tracker.lastInputTimestamp) {
+            protectionMisses += 1
+            armFire()
+            return
+        }
+        var replayLayout: LayoutMap?
+        defer {
+            if protected {
+                // TIS reports a selected source before the focused app always
+                // starts interpreting fresh key events through it. Keep the
+                // physical-key hold across that notification handoff; otherwise
+                // the first post-fix key can land in the old script (seen as
+                // "אנh" in Firefox). Held keys replay with replayLayout below.
+                if replayLayout != nil { Thread.sleep(forTimeInterval: 0.06) }
+                inputBarrier.finish(layout: replayLayout)
+            }
+        }
+
+        #if DEBUG
+        // Deterministic overlap in the isolated UI VM: physical keys posted
+        // during this pause must be queued and replayed, never lost.
+        if protected && UITestMode.isActive &&
+           ProcessInfo.processInfo.arguments.contains("-uiTestSlowAutoFix") {
+            Thread.sleep(forTimeInterval: 0.12)
+        }
+        #endif
+
+        carriedOpaque = 0
         let previous = InputSourceManager.currentSourceID()
         // Delete the ACTUAL on-screen span of the run, not the tracked keystroke count:
         // text services can mutate the typed keys on screen. Falls back to the tracked count
@@ -323,17 +371,32 @@ final class AutoSwitchController {
         // backspace+type burst runs for up to a SECOND in a live-search field (Spotlight),
         // long enough for the user's own keystrokes to interleave and corrupt the result
         // (`anשמע הוvא…`). Works wherever the field exposes settable text — native fields,
-        // Spotlight, browser search/address bars; Electron/web/terminals no-op and fall
-        // through to the synthetic path. Fires here on the quiet-gap pause, never mid-typing.
-        if AXTextEditor.replaceRunBeforeCaret(count: span.count, with: result.converted) {
+        // Spotlight and native text fields; web-backed, Electron, and terminal
+        // editors take the keyboard fallback. The barrier holds physical typing
+        // throughout either path; without it, main's quiet gap is retained.
+        let axResult = AXTextEditor.replaceRunBeforeCaret(count: span.count, with: result.converted)
+        switch axResult {
+        case .replaced:
             editGeneration += 1
             if let switchTo = result.targetSourceID {
                 suppressCue?()
                 InputSourceManager.switchTo(sourceID: switchTo)
+                // The destination app can lag the TIS selection notification.
+                // Keys already held by the barrier belong to the NEW layout
+                // even if currentSourceID() still reports the old one here.
+                if protected {
+                    replayLayout = LayoutMap.forSource(switchTo)
+                }
             }
             SoundEffect.playClick()
             finishFire(run: run, target: target, converted: result.converted, previous: previous)
             return
+        case .indeterminate:
+            // An AX setter may have partly changed the field. Never follow it
+            // with a second, blind deletion stream.
+            streak.breakRun(); tracker.resetRun(); return
+        case .unchanged:
+            break
         }
         // The atomic replace didn't take. If this is a LIVE-SEARCH field that can't take it
         // (e.g. Spotlight in a run where it doesn't expose settable AX text), do NOT fall back
@@ -347,8 +410,11 @@ final class AutoSwitchController {
         // Synthetic fallback (Electron / web / terminal — not an overlay that dismisses
         // mid-rewrite): backspaces + typing.
         rewrite(deleteCount: span.count, type: result.converted,
-                switchTo: result.targetSourceID, paced: false,
+                switchTo: result.targetSourceID, paced: false, protected: protected,
                 expectedResidue: span.before.map { String($0.dropLast(span.count)) + result.converted })
+        if let switchTo = result.targetSourceID, protected {
+            replayLayout = LayoutMap.forSource(switchTo)
+        }
         finishFire(run: run, target: target, converted: result.converted, previous: previous)
     }
 
@@ -373,6 +439,7 @@ final class AutoSwitchController {
             self?.resolveApproval(generation: generation)
         }
         carriedOpaque = 0
+        protectionMisses = 0
         tracker.resetRun()
         streak.breakRun()   // switched to the right layout now; start a fresh streak
         disarmFire()
@@ -398,18 +465,21 @@ final class AutoSwitchController {
         // char, e.g. "how are you" reverting to "h" + original). Fall back to the
         // synthetic delete+retype only where the field isn't settable (Electron /
         // web / terminal), exactly as fire() does.
-        if AXTextEditor.replaceRunBeforeCaret(count: span.count, with: undo.originalRun) {
+        switch AXTextEditor.replaceRunBeforeCaret(count: span.count, with: undo.originalRun) {
+        case .replaced:
             editGeneration += 1
             if let switchTo = undo.previousSourceID {
                 suppressCue?()
                 InputSourceManager.switchTo(sourceID: switchTo)
             }
             SoundEffect.playClick()
-        } else {
+        case .unchanged:
             rewrite(deleteCount: span.count, type: undo.originalRun,
                     switchTo: undo.previousSourceID,
                     paced: AXTextEditor.focusedElementIsSearchField(),
                     expectedResidue: span.before.map { String($0.dropLast(span.count)) + undo.originalRun })
+        case .indeterminate:
+            return false
         }
         // Count ONE rejection per DISTINCT word (a run like "akuo akuo" repeats
         // the word; counting each occurrence would block it from a single undo).
@@ -446,13 +516,22 @@ final class AutoSwitchController {
     // the caret (pre-rewrite content minus the deleted span, plus `text`), when the
     // pre-rewrite state was readable; nil falls back to the weaker tail heuristic.
     private func rewrite(deleteCount: Int, type text: String, switchTo sourceID: String?,
-                         paced: Bool, expectedResidue: String? = nil) {
+                         paced: Bool, protected: Bool = false,
+                         expectedResidue: String? = nil) {
         tracker.beginSyntheticEdit()
         editGeneration += 1
         let generation = editGeneration
 
-        KeyInput.deleteBackward(deleteCount, paced: paced)
-        KeyInput.typeText(text, paced: paced)
+        let token = protected ? SyntheticEventMarker.newDeliveryToken() : nil
+        if let token { inputBarrier.expectSynthetic(token: token, count: 2 * (deleteCount + text.count)) }
+        KeyInput.deleteBackward(deleteCount, paced: paced, token: token)
+        KeyInput.typeText(text, paced: paced, token: token)
+        if protected {
+            // Replayed physical keys must follow the last synthetic key, and
+            // they must be visible to the tracker when the hold is released.
+            _ = inputBarrier.waitForSynthetic(timeout: 1)
+            tracker.endSyntheticEdit()
+        }
         if let sourceID {
             suppressCue?()                       // mute the cue for the switch we cause
             InputSourceManager.switchTo(sourceID: sourceID)
@@ -466,7 +545,7 @@ final class AutoSwitchController {
         let drain = 0.1 + Double(deleteCount + text.count) * 0.001
         DispatchQueue.main.asyncAfter(deadline: .now() + drain) { [weak self] in
             guard let self, self.editGeneration == generation else { return }
-            self.tracker.endSyntheticEdit()
+            if !protected { self.tracker.endSyntheticEdit() }
             // Self-check: the field must now hold exactly what the rewrite PLANNED
             // (pre-rewrite content minus the deleted span, plus the typed text).
             // Catches every execution divergence: a text service re-mutating the

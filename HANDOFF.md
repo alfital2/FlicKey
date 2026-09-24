@@ -1,23 +1,21 @@
 ## Status
 
-The local `dev` branch now includes the multilingual keyboard-layout conversion work via a fast-forward from `f660592` to `feat/multilingual-layouts` at `7807319`; it also includes the intervening main commits because `dev` was an ancestor. The code tree was the tested feature tree: 559 host tests passed, five existing TextEdit Tart tests passed, two Russian TextEdit Tart tests passed twice, and the Spotlight typing-rig passed 50 of 50 repetitions after one earlier transient failure. `main` and the user's running app remain unchanged. The root worktree is still on `fix/auto-fix-continuous-typing` with its pre-existing uncommitted combined changes; the local `dev` worktree is `build/dev-merge-worktree`.
+Local `dev` combines the multilingual converter (`7807319`) and global continuous-typing auto-fix (`c20623b`) through the isolated integration merge. Auto-fix remains opt-in/beta; this is not a release or beta graduation. The user's installed FlicKey build 73 is still the pre-merge auto-fix branch, not this combined code. `main` and remote refs are unchanged.
 
 ## Recent changes
 
-- Fast-forwarded local `dev` to the tested multilingual branch without conflicts, preserving the separate continuous-typing work.
-- Confirmed `dev` was an ancestor of the feature branch, so the merge produced the exact previously tested code tree and did not need a duplicate test run.
-- Kept the Russian Tart UI tests and 50-run Spotlight evidence in the merged branch. The 50-run report is at `build/multilingual-main-worktree/build/tart/results/SpotlightRig50-20260924.xcresult`.
+- Merged the continuous-typing input barrier and live auto-fix QA matrix with `dev`'s multilingual converter; kept both the Russian UI test entry point and the auto-fix test entry points when resolving test-runner conflicts.
+- Verified the combined tree: 564 host unit tests passed with zero failures, 2/2 Russian conversion UI tests and 16/16 continuous auto-fix UI tests passed in the disposable `flickey-terminal-qa` Tart VM, and Release configuration compiled (ad-hoc local build only). The VM was stopped afterward.
 
 ## Open questions / blockers
 
-- The earlier Spotlight first-key transition failure remains unexplained despite the subsequent 50/50 passing run. Russian UI coverage still needs common browser and editor fields before a broad compatibility claim.
-- Some layouts lack functional macOS spell-check dictionaries; text-only reconstruction cannot resolve every lost key distinction. IMEs remain outside verified scope.
-- `dev` is a local branch only; there is no `origin/dev` ref, and no push, release, or installation was performed.
+- A user's 135-frame GIF at `/Users/tal/Library/Caches/poof/poof-1790262959645.gif` proves build 73 leaves the initial `a` when clean `akuo akuo ` becomes `aשלום שלום ` in Codex's text UI inside Terminal. The matching 18:15:58 FlicKey log recorded a `tailMutated` rewrite mismatch. Cause is not yet distinguished between a short AX span and a missed synthetic Backspace. The existing VM `vared` test did not cover this TUI; the user accepts this known issue for a beta merge, not for release.
+- The broad VM UI sweep had macOS Accessibility/XCTest stalls and is not green. Mail, ChatGPT desktop, secure native fields, and other editors lack full qualification. Russian layouts with no functional spelling dictionary and IMEs remain limited.
 
 ## Next steps
 
-1. Investigate the Spotlight transition issue if it recurs and expand Russian live-editor qualification.
-2. Review the multilingual feature on `dev` before any release or remote publication.
-3. Keep the continuous-typing auto-fix work separate until its own browser/editor QA is resolved.
+1. Investigate the confirmed Codex-in-Terminal deletion bug and add a real text-UI fixture; the existing `vared` test is insufficient.
+2. Address the stalled broad UI harness and remaining app coverage before considering beta graduation or release.
+3. Review the local `dev` merge and decide separately whether/when to publish it; do not infer release approval from this beta merge.
 
-_Last updated: 2026-09-24 by GPT-6 / Codex_
+_Last updated: 2026-09-24 by Codex_
