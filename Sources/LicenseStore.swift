@@ -14,6 +14,7 @@ enum LicenseStore {
     private static let account = "license"
     private static let lastValidatedKey = "license.lastValidated"
     private static let revalidateInterval: TimeInterval = 3 * 24 * 60 * 60
+    private static var revalidationInFlight = false
 
     static let buyURL = URL(string: "https://flickey.lemonsqueezy.com/checkout/buy/b5eabf81-bc60-4a8e-b17e-e637774cb581")!
 
@@ -47,7 +48,9 @@ enum LicenseStore {
             }
             let record = Record(key: key, instanceID: instance,
                                 name: lic.customerName ?? "", email: lic.customerEmail ?? "")
-            save(record)
+            guard save(record) else {
+                return .failure("Couldn't save the license to Keychain. Unlock your Mac and try again.")
+            }
             AppDefaults.store.set(Date().timeIntervalSince1970, forKey: lastValidatedKey)
             return .success(record)
         } catch LemonSqueezy.LSError.wrongStore {
@@ -62,10 +65,14 @@ enum LicenseStore {
     static func revalidateIfDue() {
         guard let record = current else { return }
         let now = Date().timeIntervalSince1970
-        guard now - AppDefaults.store.double(forKey: lastValidatedKey) > revalidateInterval else { return }
+        guard !revalidationInFlight,
+              now - AppDefaults.store.double(forKey: lastValidatedKey) > revalidateInterval else { return }
+        revalidationInFlight = true
         Task {
+            defer { revalidationInFlight = false }
             do {
                 let lic = try await LemonSqueezy.validate(key: record.key, instanceID: record.instanceID)
+                guard current == record else { return }  // activation changed during the request
                 AppDefaults.store.set(now, forKey: lastValidatedKey)
                 if !lic.valid { clear() }     // refunded / revoked
             } catch {
@@ -83,11 +90,11 @@ enum LicenseStore {
 
     // MARK: - Private
 
-    private static func save(_ record: Record) {
-        if let data = try? JSONEncoder().encode(record) {
-            Keychain.set(data, service: service, account: account)
-        }
+    private static func save(_ record: Record) -> Bool {
+        guard let data = try? JSONEncoder().encode(record),
+              Keychain.set(data, service: service, account: account) else { return false }
         notifyChanged()
+        return true
     }
 
     private static func clear() {

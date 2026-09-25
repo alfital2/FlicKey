@@ -48,7 +48,10 @@ enum LemonSqueezy {
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         guard let r = try? decoder.decode(Response.self, from: data) else { throw LSError.malformed }
         let ok = (kind == .activate) ? (r.activated ?? false) : (r.valid ?? false)
-        if ok, let store = r.meta?.storeId, store != expectedStoreID { throw LSError.wrongStore }
+        if ok {
+            guard let store = r.meta?.storeId else { throw LSError.malformed }
+            if store != expectedStoreID { throw LSError.wrongStore }
+        }
         return LSLicense(valid: ok,
                          errorMessage: r.error,
                          storeID: r.meta?.storeId,

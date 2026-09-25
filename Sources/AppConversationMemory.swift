@@ -56,6 +56,11 @@ final class AppConversationMemory {
         inputMonitor.start()
     }
 
+    func stop() {
+        leftApp()
+        inputMonitor.stop()
+    }
+
     // MARK: - App lifecycle (driven by AppWatcher)
 
     func appActivated(_ app: NSRunningApplication) {

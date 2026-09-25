@@ -149,3 +149,45 @@ final class EntitlementTests: XCTestCase {
         }
     }
 }
+
+final class TrialRecoveryTests: XCTestCase {
+    private let cutoff = Entitlement.grandfatherCutoff
+    private func state(_ firstRun: Int, elapsed: Int = 0) -> TrialState {
+        TrialState(firstRun: firstRun, maxElapsed: elapsed, lastNag: 0)
+    }
+
+    func testMissingKeychainKeepsNewCustomerTrialInsteadOfGrandfathering() {
+        let backup = state(cutoff + 100, elapsed: 5 * 24 * 60 * 60)
+        let recovered = TrialRecovery.choose(keychain: nil, backup: backup,
+                                             backupWasPresent: true, priorUse: true,
+                                             now: cutoff + 200)
+        XCTAssertEqual(recovered, backup)
+        XCTAssertEqual(Entitlement.decide(trial: recovered, now: cutoff + 200,
+                                          isLicensed: false), .trial(daysLeft: 25))
+    }
+
+    func testCorruptPaidEraBackupFailsClosed() {
+        let recovered = TrialRecovery.choose(keychain: nil, backup: nil,
+                                             backupWasPresent: true, priorUse: true,
+                                             now: cutoff + 200)
+        XCTAssertEqual(Entitlement.decide(trial: recovered, now: cutoff + 200,
+                                          isLicensed: false), .expired)
+    }
+
+    func testLegacyPreferencesStillProtectGrandfatheredUser() {
+        let recovered = TrialRecovery.choose(keychain: nil, backup: nil,
+                                             backupWasPresent: false, priorUse: true,
+                                             now: cutoff + 200)
+        XCTAssertEqual(Entitlement.decide(trial: recovered, now: cutoff + 200,
+                                          isLicensed: false), .grandfathered)
+    }
+
+    func testTwoStoresPreserveEarliestStampAndLongestElapsed() {
+        let recovered = TrialRecovery.choose(keychain: state(cutoff + 200, elapsed: 1),
+                                             backup: state(cutoff + 100, elapsed: 40),
+                                             backupWasPresent: true, priorUse: true,
+                                             now: cutoff + 200)
+        XCTAssertEqual(recovered.firstRun, cutoff + 100)
+        XCTAssertEqual(recovered.maxElapsed, 40)
+    }
+}

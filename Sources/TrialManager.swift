@@ -11,50 +11,56 @@ enum TrialManager {
                             : "com.talalfi.FlicKey.trial"
     }
     private static let account = "trial"
+    private static let backupKey = "trialStateBackup.v1"
 
     private static func now() -> Int { Int(Date().timeIntervalSince1970) }
 
     static func load() -> TrialState {
-        if let data = Keychain.get(service: service, account: account),
-           let state = try? JSONDecoder().decode(TrialState.self, from: data),
-           state.firstRun > 0 {   // reject crafted/corrupt records (firstRun 0 = "forever")
-            return state
-        }
-        // No readable record. Distinguish a genuinely fresh install from an
-        // EXISTING install whose Keychain record was lost (migration, keychain
-        // reset, restore): re-stamping an old user as "first run today" would
-        // silently turn a grandfathered free-forever user into a 30-day trial -
-        // a broken promise (QA 0.5.1-diag finding). Evidence of prior use in our
-        // defaults domain means this Mac ran FlicKey before; stamp it as
-        // pre-cutoff so the grandfather clause holds. The failure direction is
-        // deliberate: when in doubt, the user gets FlicKey free.
-        let fresh: TrialState
-        if PriorUseEvidence.exists(in: AppDefaults.store) {
-            fresh = TrialState(firstRun: Entitlement.grandfatherCutoff - 1, maxElapsed: 0, lastNag: 0)
-        } else {
-            fresh = TrialLogic.start(now: now())   // first ever launch
-        }
-        save(fresh)
-        return fresh
+        let keychainState = Keychain.get(service: service, account: account)
+            .flatMap { try? JSONDecoder().decode(TrialState.self, from: $0) }
+            .flatMap { $0.firstRun > 0 ? $0 : nil }
+        let backupData = AppDefaults.store.data(forKey: backupKey)
+        let backupState = backupData
+            .flatMap { try? JSONDecoder().decode(TrialState.self, from: $0) }
+            .flatMap { $0.firstRun > 0 ? $0 : nil }
+        let state = TrialRecovery.choose(
+            keychain: keychainState, backup: backupState,
+            backupWasPresent: AppDefaults.store.object(forKey: backupKey) != nil,
+            priorUse: PriorUseEvidence.exists(in: AppDefaults.store), now: now())
+        // Migrate old records into the backup, and restore either surviving
+        // record into the other store. Save also ratchets toward the older stamp.
+        if state != keychainState || state != backupState { save(state) }
+        return state
     }
 
     // Marks that this install has completed a launch - the primary prior-use
     // marker for the keychain-loss heuristic above. Called at the END of the
     // launch path, after the first load() has already run.
     static func markLaunchCompleted() {
-        AppDefaults.store.set(true, forKey: "hasCompletedFirstLaunch")
+        // Never create legacy prior-use evidence for a fresh user unless the
+        // first-run stamp survived in at least one store.
+        if Keychain.get(service: service, account: account) != nil ||
+            AppDefaults.store.data(forKey: backupKey) != nil {
+            AppDefaults.store.set(true, forKey: "hasCompletedFirstLaunch")
+        }
     }
 
     // Persist the clock-rollback ratchet for EVERY user at launch. Previously
     // only the grandfathered nag path saved the ratcheted state, so a trial user
     // could roll the clock back and freeze the trial (QA 0.5.1-diag finding).
-    static func persistRatchet() {
-        let decision = TrialLogic.decide(state: load(), now: now(), isLicensed: true)  // true = never nags
-        save(decision.newState)
+    static func persistRatchet(minimumAdvance: Int = 0) {
+        let state = load()
+        let decision = TrialLogic.decide(state: state, now: now(), isLicensed: true)  // true = never nags
+        if decision.newState.maxElapsed - state.maxElapsed >= minimumAdvance ||
+            (state.maxElapsed < Entitlement.trialLength &&
+             decision.newState.maxElapsed >= Entitlement.trialLength) {
+            save(decision.newState)
+        }
     }
 
     static func save(_ state: TrialState) {
         if let data = try? JSONEncoder().encode(state) {
+            AppDefaults.store.set(data, forKey: backupKey)
             Keychain.set(data, service: service, account: account)
         }
     }
@@ -76,5 +82,6 @@ enum TrialManager {
 
     static func reset() {
         Keychain.delete(service: service, account: account)
+        AppDefaults.store.removeObject(forKey: backupKey)
     }
 }

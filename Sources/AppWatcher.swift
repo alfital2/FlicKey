@@ -79,6 +79,9 @@ final class AppWatcher {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
         observer = nil
+        inputMonitor.stop()
+        learningTarget = nil
+        programmaticChangeToIgnore = nil
     }
 
     // Routes an app to its input rule. Called for normal activations (the

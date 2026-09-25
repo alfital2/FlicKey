@@ -62,6 +62,11 @@ final class TabMemory {
         inputMonitor.start()
     }
 
+    func stop() {
+        leftBrowser()
+        inputMonitor.stop()
+    }
+
     // MARK: - Browser lifecycle (driven by AppWatcher)
 
     func browserActivated(_ app: NSRunningApplication) {

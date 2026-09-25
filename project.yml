@@ -120,6 +120,7 @@ targets:
       - path: Sources/SpellChecking.swift
       - path: Sources/TeamsConversationProvider.swift
       - path: Sources/TrialLogic.swift
+      - path: Sources/TrialRecovery.swift
       - path: Sources/TrialReminder.swift
       - path: Sources/WelcomeTour.swift
       - path: Sources/TypedWordTracker.swift

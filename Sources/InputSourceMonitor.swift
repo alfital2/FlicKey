@@ -28,6 +28,14 @@ final class InputSourceMonitor {
         )
     }
 
+    func stop() {
+        guard started else { return }
+        started = false
+        let center = CFNotificationCenterGetDistributedCenter()
+        CFNotificationCenterRemoveEveryObserver(center, Unmanaged.passUnretained(self).toOpaque())
+        onChange = nil
+    }
+
     deinit {
         let center = CFNotificationCenterGetDistributedCenter()
         CFNotificationCenterRemoveEveryObserver(center, Unmanaged.passUnretained(self).toOpaque())

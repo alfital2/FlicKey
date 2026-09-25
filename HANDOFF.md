@@ -1,23 +1,25 @@
 ## Status
 
-Local `dev` contains the multilingual converter and opt-in continuous-typing auto-fix; the app source is unchanged from the build 74 QA install. This session added live Arabic PC regression coverage and ran it in the disposable `flickey-ui` Tart VM. All 30 repeated Arabic UI executions passed, and the VM was stopped. `main` and remote refs remain unchanged.
+Local `dev` combines multilingual conversion and opt-in continuous-typing auto-fix. The entitlement audit identified and fixed Release test-mode bypass, paid-era trial recovery, running-app expiry, monitor shutdown, and license persistence/validation safeguards. Build 74 remains a QA install; the new local Release build is ad-hoc and unpublished. Project metadata is still 0.5.6/build 60, so this is not yet a releasable artifact. `main` and remote refs are unchanged.
 
 ## Recent changes
 
-- Added `ArabicConversionUITests` and the `scripts/tart.sh arabic-ui` entry point because prior Arabic coverage was unit-level only. The tests exercise `sghl` ↔ `سلام`, physical Arabic PC `b-a-d` → `لاشي` → `bad`, and separate `g+h` → `لا` → `gh` in TextEdit. Each case restores the VM's keyboard sources.
-- Ran all three cases once, then ten iterations of each: 30/30 executions passed with zero failures or skips. Saved transcript: `build/tart/results/test-transcript-20260925-121332.txt`; result bundle: `build/tart/results/FlicKeyUITests-20260925-121332.xcresult` (paths relative to this worktree). `bash -n` and `git diff --check` passed.
-- Prior fresh-`dev` QA remains: 564 host and 564 Tart unit tests passed with no skips, including a 960-case 16-layout conversion oracle; Russian TextEdit 2/2, Spotlight 2/2, and continuous typing 16/16 passed on the second Tart VM. The user indicated whole-line conversion in the selected-text case is expected, so that older UI assertion needs alignment.
+- Restricted `-uiTestReset` and other UI test behavior to Debug, so a customer Release process cannot restart into an isolated fresh trial. The compiled Release binary contains no test-reset or entitlement-simulation switch strings.
+- Added a trial-state backup and recovery logic that preserves post-cutoff first-run time and elapsed ratchet when Keychain state is lost, while retaining the historical grandfathering fallback. Replaced delete-before-add Keychain writes, and made license activation fail visibly if persistence fails.
+- Added a 60-second entitlement check, hourly trial ratchet persistence, a stop path for all paid feature monitors, periodic license revalidation, and a guard against an old validation response clearing a newly activated license. Successful Lemon Squeezy responses now require this store's ID.
+- Host unit suite passed 569/569. Tart Support suite passed 5/5 live UI cases, including expired paywall and an expired TextEdit double-Shift that left wrong-layout text untouched. Final Release build succeeded; `git diff --check` and `bash -n scripts/tart.sh` passed. Disposable Tart VM was stopped.
+- Earlier combined-tree QA remains: 564 host and 564 Tart unit tests, 960 directed conversions across 16 layouts, Russian TextEdit/Spotlight, and 30/30 Arabic PC TextEdit repetitions passed before these entitlement edits.
 
 ## Open questions / blockers
 
-- Arabic PC **manual** conversion is now live-tested in TextEdit. Automatic Arabic correction was not qualified: the audited host's Arabic spell-check dictionary probe failed, and automatic detection depends on functional dictionaries. Other Arabic keyboard variants, IMEs, and editors were not live-tested.
-- The recorded ⌃⌥9 shortcut did not convert under synthetic Tart key delivery; physical-key behavior is unverified. Four Firefox fixtures failed with empty DOM snapshots on one VM and passed on another. The previously confirmed Codex-in-Terminal stray-character rewrite remains unaddressed in build 74.
-- Build 74 is a local QA install. No release, push, or beta graduation occurred.
+- Actual checkout, valid-key activation, refund/revocation, and upgrade migration from a shipped 0.5.6 install have not been exercised end to end. An old post-cutoff install with both its Keychain stamp and new backup absent remains indistinguishable from a grandfathered legacy install; the compatibility fallback grants it free access. This ambiguity needs an explicit policy decision before broad rollout.
+- Published GitHub latest is v0.5.6, and the project/appcast still declare 0.5.6/build 60; choose a higher version and build above QA build 74 before packaging. The final DMG/ZIP has not been Developer ID signed, notarized, or published.
+- Earlier UI limits remain: custom shortcut physical-key behavior, Codex-in-Terminal stray-character rewrite, Firefox VM variability, and Arabic auto-correction without a functional Arabic dictionary.
 
 ## Next steps
 
-1. If broader Arabic support is needed, test additional Arabic keyboard variants and editors; qualify automatic correction only with a working Arabic dictionary.
-2. Align the selected-text UI assertion with intended behavior and check the custom shortcut using physical keys.
-3. Investigate the Codex-in-Terminal rewrite and stabilize the Firefox/broad UI fixtures before release consideration.
+1. Decide the legacy missing-stamp policy and test a real valid license plus revocation in a disposable environment.
+2. Run an upgrade test from published 0.5.6, then complete the remaining release-quality UI checks.
+3. Bump version/build, sign and notarize an exact candidate, verify Sparkle and install/upgrade paths, roll out to a small cohort, then publish broadly after review.
 
 _Last updated: 2026-09-25 by Codex_

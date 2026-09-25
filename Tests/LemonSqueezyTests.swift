@@ -42,6 +42,15 @@ final class LemonSqueezyTests: XCTestCase {
         }
     }
 
+    func testSuccessfulResponseWithoutStoreMetadataCannotUnlock() {
+        let noStore = String(data: activateJSON, encoding: .utf8)!
+            .replacingOccurrences(of: "\"meta\":{\"store_id\":400531,\"order_id\":8630956,\"variant_name\":\"Default\",\"product_id\":1124523,\"product_name\":\"FlicKey License\",\"customer_name\":\"flickey\",\"customer_email\":\"flickey.support@gmail.com\"}", with: "\"meta\":null")
+            .data(using: .utf8)!
+        XCTAssertThrowsError(try LemonSqueezy.parse(noStore, kind: .activate)) { error in
+            XCTAssertEqual(error as? LemonSqueezy.LSError, .malformed)
+        }
+    }
+
     func testInvalidKeyReturnsMessageNotThrow() throws {
         let json = """
         {"valid":false,"error":"license_key not found.","license_key":null,"instance":null,"meta":null}

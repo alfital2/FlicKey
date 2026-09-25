@@ -75,4 +75,51 @@ final class SupportUITests: XCTestCase {
         XCTAssertTrue(waitUntil(timeout: 4) { activate.isEnabled },
                       "Activate should be re-enabled after the failed attempt")
     }
+
+    func testExpiredTrialShowsPaywallAndLicenseEntry() {
+        step("Launch as expired — expect the paywall and a way to enter a license")
+        app.terminate()
+        app.launchArguments.append("-simulateExpired")
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["Your free trial has ended"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["Unlock FlicKey"].exists)
+        XCTAssertTrue(app.buttons["Enter a License Key"].exists)
+        let status = app.descendants(matching: .any).matching(identifier: "licenseStatus").firstMatch
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        XCTAssertEqual(status.value as? String, "Your free trial has ended.")
+    }
+
+    func testExpiredTrialLeavesWrongLayoutTextUntouched() throws {
+        guard let pair = twoEnabledLayouts(),
+              pair.latin == "com.apple.keylayout.ABC",
+              pair.other == "com.apple.keylayout.Hebrew-PC" else {
+            throw XCTSkip("Needs ABC and Hebrew-PC for the conversion gate check")
+        }
+        step("Expired trial — double Shift must leave TextEdit unchanged")
+        app.terminate()
+        app.launchArguments.append("-simulateExpired")
+        app.launch()
+        XCTAssertTrue(app.staticTexts["Your free trial has ended"].waitForExistence(timeout: 10))
+
+        let textEdit = XCUIApplication(bundleIdentifier: "com.apple.TextEdit")
+        textEdit.launchArguments = ["-NSAutomaticCapitalizationEnabled", "NO",
+                                    "-NSAutomaticSpellingCorrectionEnabled", "NO"]
+        textEdit.launch()
+        defer { textEdit.terminate() }
+        var field = textEdit.textViews.firstMatch
+        if !field.waitForExistence(timeout: 5) {
+            textEdit.typeKey("n", modifierFlags: .command)
+            field = textEdit.textViews.firstMatch
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.click()
+        textEdit.typeKey("a", modifierFlags: .command)
+        textEdit.typeKey(.delete, modifierFlags: [])
+        field.typeText("akuo")
+        XCTAssertEqual(field.value as? String, "akuo")
+        doubleTapShift()
+        XCTAssertFalse(waitUntil(timeout: 2) { (field.value as? String) == "שלום" })
+        XCTAssertEqual(field.value as? String, "akuo")
+    }
 }

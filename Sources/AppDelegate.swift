@@ -15,6 +15,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let trialEnded = TrialEndedController()
     private var coreStarted = false
     private var accessibilityFeaturesRunning = false
+    private var entitlementTimer: Timer?
+    private var lastEntitlement: Entitlement?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // UI tests: redirect all settings to a throwaway store BEFORE anything
@@ -48,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         Entitlement.applyDebugOverride(from: args)   // -simulateExpired etc.
         #endif
-        if let i = args.firstIndex(of: "-uiTestSeedSites"), i + 1 < args.count {
+        if UITestMode.isActive, let i = args.firstIndex(of: "-uiTestSeedSites"), i + 1 < args.count {
             for pair in args[i + 1].split(separator: ";") {
                 let kv = pair.split(separator: "=", maxSplits: 1)
                 if kv.count == 2 { SiteMemoryStore.set(String(kv[1]), for: String(kv[0])) }
@@ -57,7 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // UI tests: seed per-app forced rules into the (isolated) store. Value
         // form: "AppName=sourceID;AppName=sourceID". Each app is added as a
         // custom entry (rules only resolve for listed apps) with an override.
-        if let i = args.firstIndex(of: "-uiTestSeedAppRules"), i + 1 < args.count {
+        if UITestMode.isActive, let i = args.firstIndex(of: "-uiTestSeedAppRules"), i + 1 < args.count {
             for pair in args[i + 1].split(separator: ";") {
                 let kv = pair.split(separator: "=", maxSplits: 1)
                 guard kv.count == 2 else { continue }
@@ -66,7 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 RulesStore.set(String(kv[1]), forMatchKey: name.lowercased())
             }
         }
-        if args.contains("-uiTestEnableAutoSwitch") {
+        if UITestMode.isActive && args.contains("-uiTestEnableAutoSwitch") {
             AutoSwitchSettings.isEnabled = true
         }
 
@@ -165,6 +167,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if !UITestMode.isActive { TrialManager.persistRatchet() }
 
         refreshEntitlement()
+        // The menu bar app can stay open past the trial deadline. Recheck while
+        // it is running so an expired trial does not keep its active monitors.
+        entitlementTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            if !UITestMode.isActive { TrialManager.persistRatchet(minimumAdvance: 3600) }
+            self?.refreshEntitlement()
+            LicenseStore.revalidateIfDue()
+        }
 
         if !UITestMode.isActive, isFreshInstall {
             _ = LaunchAtLogin.setEnabled(true)
@@ -200,7 +209,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // UI-test hook: open Settings on launch so the XCUITest suite doesn't
         // depend on clicking the (flaky to automate) menu-bar status item.
-        if args.contains("-uiTestOpenSettings") {
+        if UITestMode.isActive && args.contains("-uiTestOpenSettings") {
             statusBar?.presentSettingsForTesting()
         }
     }
@@ -209,12 +218,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // panel. Called at launch and whenever the license state changes.
     private func refreshEntitlement() {
         let entitlement = Entitlement.current()
+        let previous = lastEntitlement
+        let wasExpired = previous == .expired
+        lastEntitlement = entitlement
         if entitlement.coreEnabled {
             trialEnded.dismiss()
             startCoreFeatures()
-            runRemindersIfNeeded(for: entitlement)
+            if previous != entitlement { runRemindersIfNeeded(for: entitlement) }
         } else {
-            trialEnded.present()
+            stopCoreFeatures()
+            if !wasExpired { trialEnded.present() }
         }
     }
 
@@ -227,6 +240,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         conversationMemory.start()
         appWatcher.start()
         refreshAccessibilityFeatures()
+    }
+
+    private func stopCoreFeatures() {
+        guard coreStarted else { return }
+        coreStarted = false
+        autoSwitch.stop()
+        hotkeyManager.stop()
+        focusWatcher.stop()
+        accessibilityFeaturesRunning = false
+        appWatcher.stop()
+        tabMemory.stop()
+        conversationMemory.stop()
     }
 
     private func accessibilityTrustChanged(_ trusted: Bool) {

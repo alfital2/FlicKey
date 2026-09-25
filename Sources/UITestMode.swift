@@ -10,10 +10,16 @@ import Foundation
 //   • NagController  → silenced
 //   • Overlay        → HUDs stay up long enough for XCUITest's ~1 Hz polling
 enum UITestMode {
+    #if DEBUG
     private static let arguments = ProcessInfo.processInfo.arguments
 
     // Relaunch tests stay in the isolated domain but deliberately retain it.
     static let isActive = arguments.contains("-uiTestReset")
         || arguments.contains("-uiTestPreserveState")
     static let shouldResetState = arguments.contains("-uiTestReset")
+    #else
+    // Test launch arguments must never create a renewable trial in a customer build.
+    static let isActive = false
+    static let shouldResetState = false
+    #endif
 }
