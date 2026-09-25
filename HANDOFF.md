@@ -1,25 +1,24 @@
 ## Status
 
-Local `dev` combines multilingual conversion and opt-in continuous-typing auto-fix. The entitlement audit identified and fixed Release test-mode bypass, paid-era trial recovery, running-app expiry, monitor shutdown, and license persistence/validation safeguards. Build 74 remains a QA install; the new local Release build is ad-hoc and unpublished. Project metadata is still 0.5.6/build 60, so this is not yet a releasable artifact. `main` and remote refs are unchanged.
+Local `dev` combines multilingual conversion and opt-in continuous-typing auto-fix with entitlement hardening. The user chose the generous legacy policy: surviving old preferences with no readable trial stamps qualify for free-forever grandfathering. Build 74 remains a QA install; no customer release, push, or change to `main` occurred. Project metadata is still 0.5.6/build 60, so the locally signed candidate is not a releasable update.
 
 ## Recent changes
 
-- Restricted `-uiTestReset` and other UI test behavior to Debug, so a customer Release process cannot restart into an isolated fresh trial. The compiled Release binary contains no test-reset or entitlement-simulation switch strings.
-- Added a trial-state backup and recovery logic that preserves post-cutoff first-run time and elapsed ratchet when Keychain state is lost, while retaining the historical grandfathering fallback. Replaced delete-before-add Keychain writes, and made license activation fail visibly if persistence fails.
-- Added a 60-second entitlement check, hourly trial ratchet persistence, a stop path for all paid feature monitors, periodic license revalidation, and a guard against an old validation response clearing a newly activated license. Successful Lemon Squeezy responses now require this store's ID.
-- Host unit suite passed 569/569. Tart Support suite passed 5/5 live UI cases, including expired paywall and an expired TextEdit double-Shift that left wrong-layout text untouched. Final Release build succeeded; `git diff --check` and `bash -n scripts/tart.sh` passed. Disposable Tart VM was stopped.
-- Earlier combined-tree QA remains: 564 host and 564 Tart unit tests, 960 directed conversions across 16 layouts, Russian TextEdit/Spotlight, and 30/30 Arabic PC TextEdit repetitions passed before these entitlement edits.
+- Recorded the user's Option A decision beside `TrialRecovery.choose`: protect early customers even though a rare post-cutoff install that loses both trial records can receive the same free access. The existing recovery test covers this behavior.
+- Downloaded public v0.5.6 `FlicKey.zip` and built a locally Developer ID signed Release candidate with the same bundle ID and signing team. In a disposable Tart VM, a prior-preference case was grandfathered by 0.5.6 and stayed grandfathered in the candidate, matching Option A.
+- Cleared only FlicKey state in that VM and repeated as a fresh post-cutoff customer: public 0.5.6 created a trial, the candidate preserved its first-run stamp (age 57 seconds, max elapsed 16), and after deleting the trial Keychain item the candidate retained the same stamp and restored the Keychain record. Temporary app copies were removed and the VM was stopped.
+- Prior entitlement verification remains: 569/569 host unit tests; 5/5 Tart Support UI cases including expired paywall and no TextEdit conversion; Release compilation without test-reset switches. Earlier multilingual QA covered 960 directed 16-layout cases, Russian TextEdit/Spotlight, and 30/30 Arabic PC TextEdit runs.
 
 ## Open questions / blockers
 
-- Actual checkout, valid-key activation, refund/revocation, and upgrade migration from a shipped 0.5.6 install have not been exercised end to end. An old post-cutoff install with both its Keychain stamp and new backup absent remains indistinguishable from a grandfathered legacy install; the compatibility fallback grants it free access. This ambiguity needs an explicit policy decision before broad rollout.
-- Published GitHub latest is v0.5.6, and the project/appcast still declare 0.5.6/build 60; choose a higher version and build above QA build 74 before packaging. The final DMG/ZIP has not been Developer ID signed, notarized, or published.
-- Earlier UI limits remain: custom shortcut physical-key behavior, Codex-in-Terminal stray-character rewrite, Firefox VM variability, and Arabic auto-correction without a functional Arabic dictionary.
+- There is no test-mode license key available yet. Actual checkout, valid-key activation, and refund/revocation are unverified end to end. Do not claim the payment lifecycle is fully proven.
+- Public/latest release and local appcast are v0.5.6/build 60. Choose a higher version and build above QA build 74, then test the exact signed/notarized package and Sparkle update; the current signed candidate is for data migration only.
+- Prior UI risks remain: physical custom-shortcut behavior, Codex-in-Terminal stray-character rewrite, Firefox VM variability, and Arabic auto-correction without a functional dictionary.
 
 ## Next steps
 
-1. Decide the legacy missing-stamp policy and test a real valid license plus revocation in a disposable environment.
-2. Run an upgrade test from published 0.5.6, then complete the remaining release-quality UI checks.
-3. Bump version/build, sign and notarize an exact candidate, verify Sparkle and install/upgrade paths, roll out to a small cohort, then publish broadly after review.
+1. Obtain a Lemon Squeezy test-mode key and exercise activation, restart, revocation, and offline behavior in a disposable VM.
+2. Resolve or explicitly scope the remaining UI risks; bump version/build and create the exact signed/notarized release candidate.
+3. Verify install and Sparkle update from public 0.5.6, stage to a small cohort, then consider broad distribution after review.
 
 _Last updated: 2026-09-25 by Codex_

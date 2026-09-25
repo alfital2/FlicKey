@@ -22,6 +22,10 @@ enum TrialRecovery {
                               maxElapsed: Entitlement.trialLength, lastNag: 0)
         }
         if priorUse {
+            // Product policy reaffirmed 2026-09-25: when an older install has
+            // surviving preferences but neither trial stamp, favor the early
+            // customer's free-forever promise. A rare post-cutoff install that
+            // lost both stamps receives the same generous treatment.
             return TrialState(firstRun: Entitlement.grandfatherCutoff - 1,
                               maxElapsed: 0, lastNag: 0)
         }
