@@ -85,6 +85,7 @@ targets:
       - path: Sources/BrowserCatalog.swift
       - path: Sources/ContextMemoryStore.swift
       - path: Sources/ConversationMemoryCore.swift
+      - path: Sources/ProgrammaticSwitchLedger.swift
       - path: Sources/ConversationProvider.swift
       - path: Sources/ConversionEngine.swift
       - path: Sources/ConversionRouter.swift

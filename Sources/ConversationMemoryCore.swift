@@ -50,6 +50,9 @@ final class ConversationMemoryCore {
     private let store: (String, String, String) -> Void
     private let applySource: (String) -> Void
     private let currentSource: () -> String?
+    // Echoes of switches made by OTHER owners (e.g. AppWatcher forcing the app
+    // the user just left), which this core's own window cannot see.
+    private let isExternalEcho: (String) -> Bool
     private let now: () -> TimeInterval
     // Must comfortably exceed the OS's worst-case apply→notification lag,
     // including the delayed settling burst (~330ms measured), so none of those
@@ -66,8 +69,9 @@ final class ConversationMemoryCore {
     init(namespace: String,
          lookup: @escaping (String, String) -> String? = ContextMemoryStore.sourceID,
          store: @escaping (String, String, String) -> Void = ContextMemoryStore.set,
-         applySource: @escaping (String) -> Void = { InputSourceManager.switchTo(sourceID: $0) },
+         applySource: @escaping (String) -> Void = { ProgrammaticSwitches.apply($0) },
          currentSource: @escaping () -> String? = { InputSourceManager.currentSourceID() },
+         isExternalEcho: @escaping (String) -> Bool = { ProgrammaticSwitches.isEcho($0) },
          now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
          echoWindow: TimeInterval = 0.8,
          onApplied: @escaping (_ source: String, _ key: String) -> Void = { _, _ in },
@@ -77,6 +81,7 @@ final class ConversationMemoryCore {
         self.store = store
         self.applySource = applySource
         self.currentSource = currentSource
+        self.isExternalEcho = isExternalEcho
         self.now = now
         self.echoWindow = echoWindow
         self.onApplied = onApplied
@@ -108,6 +113,7 @@ final class ConversationMemoryCore {
                 return
             }
         }
+        if isExternalEcho(source) { return }
         lastAppliedSource = nil   // a genuine change supersedes any pending echo
         sourceBeforeApply = nil
         hasObservedAppliedSource = false

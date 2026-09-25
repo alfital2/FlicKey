@@ -33,8 +33,10 @@ enum InputSourceManager {
         return InputSourceCatalog.string(source, kTISPropertyInputSourceID)
     }
 
-    static func switchTo(sourceID: String) {
-        guard currentSourceID() != sourceID else { return } // already current
+    // `force` re-selects even when the source already reads as current, to
+    // override an earlier switch that is still in flight.
+    static func switchTo(sourceID: String, force: Bool = false) {
+        guard force || currentSourceID() != sourceID else { return } // already current
 
         guard let list = TISCreateInputSourceList(nil, false)?.takeRetainedValue()
             as? [TISInputSource] else { return }

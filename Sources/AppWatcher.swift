@@ -16,13 +16,6 @@ final class AppWatcher {
         let mode: LearningMode
     }
 
-    private struct IgnoredProgrammaticChange {
-        let sourceID: String
-        let pid: pid_t
-        let bundleID: String
-        let expiresAt: TimeInterval
-    }
-
     // Injected in Phase 5 to hand browser activations to TabMemory.
     var onBrowserActivated: ((NSRunningApplication) -> Void)?
     // Called when a non-browser (or EN/HE-forced) app becomes active, so
@@ -35,10 +28,6 @@ final class AppWatcher {
     private var observer: NSObjectProtocol?
     private let inputMonitor = InputSourceMonitor()
     private var learningTarget: LearningTarget?
-    // A layout forced by this watcher also emits the same system notification
-    // as a human switch. Consume that notification so a rapid activation of a
-    // different, undefined app cannot learn our delayed programmatic switch.
-    private var programmaticChangeToIgnore: IgnoredProgrammaticChange?
 
     func start() {
         inputMonitor.onChange = { [weak self] in
@@ -81,7 +70,6 @@ final class AppWatcher {
         observer = nil
         inputMonitor.stop()
         learningTarget = nil
-        programmaticChangeToIgnore = nil
     }
 
     // Routes an app to its input rule. Called for normal activations (the
@@ -139,14 +127,9 @@ final class AppWatcher {
 
     private func apply(_ sourceID: String, to app: NSRunningApplication) {
         Diag.log(.layoutSwitch(expected: sourceID, applied: sourceID))
-        if InputSourceManager.currentSourceID() != sourceID {
-            programmaticChangeToIgnore = IgnoredProgrammaticChange(
-                sourceID: sourceID,
-                pid: app.processIdentifier,
-                bundleID: app.bundleIdentifier ?? "",
-                expiresAt: ProcessInfo.processInfo.systemUptime + 1.0)
-            InputSourceManager.switchTo(sourceID: sourceID)
-        }
+        // Recorded in the shared ledger so neither this watcher nor the
+        // site/conversation memories learn its echoes as a user choice.
+        ProgrammaticSwitches.apply(sourceID)
         SwitchStats.record(.appSwitch)
     }
 
@@ -154,18 +137,9 @@ final class AppWatcher {
                                     frontmostPID: pid_t?,
                                     frontmostBundleID: String?) {
         guard let sourceID else { return }
-
-        if let ignored = programmaticChangeToIgnore,
-           ignored.sourceID == sourceID,
-           ignored.pid == frontmostPID,
-           ignored.bundleID.caseInsensitiveCompare(frontmostBundleID ?? "") == .orderedSame,
-           ProcessInfo.processInfo.systemUptime <= ignored.expiresAt {
-            programmaticChangeToIgnore = nil
-            return
-        }
-        // A stale ignore token must not swallow a later genuine user change to
-        // another source.
-        programmaticChangeToIgnore = nil
+        // Any recent FlicKey switch, including one made for the app the user
+        // just left, echoes here after the next app is already frontmost.
+        if ProgrammaticSwitches.isEcho(sourceID) { return }
 
         guard let target = learningTarget,
               frontmostPID == target.pid,

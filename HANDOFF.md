@@ -1,23 +1,23 @@
 ## Status
 
-Local `dev` combines the multilingual layout converter, opt-in continuous-typing auto-fix, and entitlement hardening. It is now numbered 0.6.0/build 75 and installed on the user's Mac as a local Developer ID signed QA app at `/Applications/FlicKey.app`; it is not notarized or published. The app is running once, with `autoSwitchEnabled=1`, for several hours of manual use. The user's generous legacy grandfathering policy remains in place. `main`, the public GitHub release, and the appcast still serve 0.5.6/build 60.
+Branch `fix/app-memory-echo` (worktree `build/app-memory-echo-worktree`, off local `dev`) fixes "Remember last used" apps learning another app's forced layout under rapid app switching. It is installed on the user's Mac as local Developer ID signed QA build 0.6.0/76 (build number overridden on the command line only; `project.yml` still says 75). Build 75 is backed up at `build/app-memory-echo-worktree/build/FlicKey-75-backup.app`. Nothing pushed; `main`, public GitHub, and the appcast remain 0.5.6/build 60. The root worktree's uncommitted `fix/auto-fix-continuous-typing` work and the `dev` worktree's uncommitted UITest edits were left untouched.
 
 ## Recent changes
 
-- Bumped `project.yml` to 0.6.0/build 75 so this combined feature release is visibly distinct from 0.5.6 and newer than local QA build 74.
-- Built the exact `dev` source as Release, signed Sparkle and the app with the same Developer ID/team as the installed build, and verified the deep signature, bundle/build numbers, binary hash after install, and absence of coverage instrumentation.
-- Backed up installed build 74 to `build/HostQA/Previous/InstalledBuild74-before-0.6.0.app`, replaced `/Applications/FlicKey.app`, and launched build 75. Confirmed one running process and preserved the enabled auto-fix preference.
+- Root cause (confirmed in the unified log at 23:48:17): Terminal forced English, WhatsApp activated ~70ms later, and Terminal's delayed English echo landed while WhatsApp was frontmost. AppWatcher's one-shot per-owner ignore token had already been overwritten by WhatsApp's apply, so it saved English as WhatsApp's last-used layout.
+- Added `ProgrammaticSwitchLedger`: a shared 0.8s window of recent FlicKey-made switches (target plus pre-switch source). AppWatcher and `ConversationMemoryCore` (browser sites, Teams) record through it and ignore any echo in it, including echoes from other owners. The Chrome↔WhatsApp variant in the same log is the cross-owner case.
+- `ProgrammaticSwitches.apply` re-issues a switch when an earlier request for a different source is still in flight, even if the current source already reads as the target.
+- Accepted trade-off: a genuine user change within 0.8s of arriving, to a source involved in a recent switch, is not learned.
 
 ## Open questions / blockers
 
-- Manual host feedback on 0.6.0/build 75 is pending. Known QA limits include the Codex-in-Terminal stray-character rewrite, physical custom-shortcut behavior, Firefox VM variability, and Arabic auto-correction without a functional dictionary.
-- Live license activation/deactivation passed in Tart, but checkout, provider-side revocation, and offline behavior remain untested. The Sparkle ZIP release flow needs an app stapling check/fix and an exact signed/notarized update test before customers receive it.
-- No customer release, appcast update, push, or `main` merge has occurred. Build 75 is a local QA install only.
+- The user's WhatsApp memory is still `ABC` from the pre-fix corruption; they need to set Hebrew once in WhatsApp.
+- Auto-fix and hotkey conversion switches are deliberately not recorded, so they are still learned as the app's layout (unchanged behavior).
 
 ## Next steps
 
-1. Collect several hours of host feedback, especially Russian, Arabic, other enabled layouts, and continuous auto-fix in everyday apps.
-2. Resolve or clearly scope observed blockers; verify the exact notarized DMG and stapled Sparkle ZIP upgrading public 0.5.6 in Tart.
-3. Merge the approved candidate to `main`, publish the GitHub assets and appcast, then monitor a small initial customer cohort.
+1. User QA of build 76: rapid WhatsApp↔Terminal and WhatsApp↔Chrome switching should keep WhatsApp Hebrew.
+2. If it holds, merge `fix/app-memory-echo` into `dev` and bump the real build number there.
+3. Continue the 0.6.0 release plan (notarized DMG, Sparkle update test from 0.5.6).
 
-_Last updated: 2026-09-25 by Codex_
+_Last updated: 2026-09-25 by Claude Code (Opus 5.5)_
