@@ -1,22 +1,23 @@
 ## Status
 
-Local `dev` combines multilingual conversion and opt-in continuous-typing auto-fix with entitlement hardening. The user chose the generous legacy policy: surviving old preferences with no readable trial stamps qualify for free-forever grandfathering. Build 74 remains a QA install; no customer release, push, or change to `main` occurred. Project metadata is still 0.5.6/build 60, so the locally signed candidate is not a releasable update. A user-supplied live license passed provider and app activation in disposable Tart; the temporary activation was released and the VM stopped.
+Local `dev` combines the multilingual layout converter, opt-in continuous-typing auto-fix, and entitlement hardening. It is now numbered 0.6.0/build 75 and installed on the user's Mac as a local Developer ID signed QA app at `/Applications/FlicKey.app`; it is not notarized or published. The app is running once, with `autoSwitchEnabled=1`, for several hours of manual use. The user's generous legacy grandfathering policy remains in place. `main`, the public GitHub release, and the appcast still serve 0.5.6/build 60.
 
 ## Recent changes
 
-- Tested a user-supplied live license without recording the key. Lemon Squeezy accepted activation for the expected store, validated the VM instance, and invalidated it after deactivation. In the app Support screen, activation unlocked a fresh trial and persisted across relaunch. A seeded expired trial unlocked and dismissed its paywall; Remove License restored expired state and paywall, deleted the isolated Keychain record, and returned provider activation usage to zero. The VM secret and test binaries were deleted.
-- Stopped the disposable VM after removing its launch job, which had restarted the VM following the first stop command.
+- Bumped `project.yml` to 0.6.0/build 75 so this combined feature release is visibly distinct from 0.5.6 and newer than local QA build 74.
+- Built the exact `dev` source as Release, signed Sparkle and the app with the same Developer ID/team as the installed build, and verified the deep signature, bundle/build numbers, binary hash after install, and absence of coverage instrumentation.
+- Backed up installed build 74 to `build/HostQA/Previous/InstalledBuild74-before-0.6.0.app`, replaced `/Applications/FlicKey.app`, and launched build 75. Confirmed one running process and preserved the enabled auto-fix preference.
 
 ## Open questions / blockers
 
-- Live activation and deactivation work for the supplied key, but checkout, provider-side revocation, and offline behavior remain untested. Do not claim the full payment lifecycle is proven.
-- Public/latest release and local appcast are v0.5.6/build 60. Choose a higher version and build above QA build 74, then test the exact signed/notarized package and Sparkle update; the current signed candidate is for data migration only.
-- Prior UI risks remain: physical custom-shortcut behavior, Codex-in-Terminal stray-character rewrite, Firefox VM variability, and Arabic auto-correction without a functional dictionary.
+- Manual host feedback on 0.6.0/build 75 is pending. Known QA limits include the Codex-in-Terminal stray-character rewrite, physical custom-shortcut behavior, Firefox VM variability, and Arabic auto-correction without a functional dictionary.
+- Live license activation/deactivation passed in Tart, but checkout, provider-side revocation, and offline behavior remain untested. The Sparkle ZIP release flow needs an app stapling check/fix and an exact signed/notarized update test before customers receive it.
+- No customer release, appcast update, push, or `main` merge has occurred. Build 75 is a local QA install only.
 
 ## Next steps
 
-1. Resolve or explicitly scope the remaining UI risks; bump version/build and create the exact signed/notarized release candidate.
-2. Verify checkout, provider-side revocation, and offline behavior when appropriate credentials or fixtures are available.
-3. Verify install and Sparkle update from public 0.5.6, stage to a small cohort, then consider broad distribution after review.
+1. Collect several hours of host feedback, especially Russian, Arabic, other enabled layouts, and continuous auto-fix in everyday apps.
+2. Resolve or clearly scope observed blockers; verify the exact notarized DMG and stapled Sparkle ZIP upgrading public 0.5.6 in Tart.
+3. Merge the approved candidate to `main`, publish the GitHub assets and appcast, then monitor a small initial customer cohort.
 
 _Last updated: 2026-09-25 by Codex_
