@@ -21,6 +21,7 @@
 #   fix-ui       LIVE: types gibberish in TextEdit, ⇧⇧, asserts it converts
 #   russian-ui   LIVE: converts English/Russian text both ways in TextEdit
 #                (part of the default UI run too)
+#   arabic-ui    LIVE: Arabic PC round-trip and lam-alef key ambiguity in TextEdit
 #   continuous-ui LIVE: auto-fix across native fields, browser tabs, and layouts
 #   continuous-tabs-ui LIVE: focused Safari/Firefox multi-tab correction gate
 #   continuous-firefox-tab-ui LIVE: repeatable Firefox race regression gate
@@ -93,6 +94,8 @@ case "$COMPONENT" in
     u HotkeyConversionUITests ;;   # LIVE: the ⇧⇧ fix in TextEdit (controls screen)
   russian-ui)
     u RussianConversionUITests ;;  # LIVE: ABC ↔ Russian conversion in TextEdit
+  arabic-ui)
+    u ArabicConversionUITests ;;   # LIVE: ABC ↔ Arabic PC, including lam-alef
   continuous-ui)
     u ContinuousAutoFixUITests ;;
   continuous-tabs-ui)
@@ -140,7 +143,7 @@ case "$COMPONENT" in
     WHOLE_UNIT=1; WHOLE_UI=1 ;;
   *)
     echo "Unknown component: '$COMPONENT'"
-    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui russian-ui continuous-ui continuous-tabs-ui continuous-firefox-tab-ui continuous-safety-ui auto-switch-ui app-switching-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
+    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui russian-ui arabic-ui continuous-ui continuous-tabs-ui continuous-firefox-tab-ui continuous-safety-ui auto-switch-ui app-switching-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
     exit 2 ;;
 esac
 

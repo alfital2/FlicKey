@@ -71,7 +71,7 @@ case "${1:-status}" in
         guest /bin/bash '/Volumes/My Shared Files/source/scripts/tart-guest-setup.sh'
         ;;
     exec) shift; guest "$@" ;;
-    smoke|unit|ui|all|fix-ui|russian-ui|continuous-ui|continuous-tabs-ui|continuous-firefox-tab-ui|continuous-safety-ui|auto-switch-ui|app-switching-ui|spotlight-ui|browser-ui|browser-ui-firefox|teams-ui)
+    smoke|unit|ui|all|fix-ui|russian-ui|arabic-ui|continuous-ui|continuous-tabs-ui|continuous-firefox-tab-ui|continuous-safety-ui|auto-switch-ui|app-switching-ui|spotlight-ui|browser-ui|browser-ui-firefox|teams-ui)
         action="$1"
         sync_source
         # The guest name and marker prevent accidentally running this on the host.
@@ -91,5 +91,5 @@ case "${1:-status}" in
         fi
         guest "${guest_environment[@]}" /bin/bash -c "cd $GUEST; scripts/test-vm.sh $action"
         ;;
-    *) echo "Usage: scripts/tart.sh start|start-visible|stop|status|setup|sync|smoke|unit|ui|all|fix-ui|russian-ui|continuous-ui|continuous-tabs-ui|continuous-firefox-tab-ui|continuous-safety-ui|auto-switch-ui|app-switching-ui|spotlight-ui|browser-ui|browser-ui-firefox|teams-ui|exec <command...>" >&2; exit 2 ;;
+    *) echo "Usage: scripts/tart.sh start|start-visible|stop|status|setup|sync|smoke|unit|ui|all|fix-ui|russian-ui|arabic-ui|continuous-ui|continuous-tabs-ui|continuous-firefox-tab-ui|continuous-safety-ui|auto-switch-ui|app-switching-ui|spotlight-ui|browser-ui|browser-ui-firefox|teams-ui|exec <command...>" >&2; exit 2 ;;
 esac
