@@ -151,6 +151,73 @@ final class BrowserIntegrationUITests: XCTestCase {
                       "returning to a learned site should restore \(other); current=\(currentInputSourceID())")
     }
 
+    // Customer scenario: three languages across browser sites, with auto-fix
+    // disabled. The third host shares a page title with localhost, exercising
+    // the URL poll when a title-change hint cannot distinguish the tabs.
+    func testThreeLayoutsRemainPerSiteAcrossRepeatedTabSwitches() throws {
+        let russianPC = "com.apple.keylayout.RussianWin"
+        let hebrewPC = "com.apple.keylayout.Hebrew-PC"
+        guard inputSourceName(id: russianPC) != nil,
+              inputSourceName(id: hebrewPC) != nil else {
+            throw XCTSkip("Needs Russian PC and Hebrew PC enabled with ABC")
+        }
+        let thirdSite = "[::1]"
+        flickey.terminate()
+        flickey.launchArguments = [
+            "-uiTestReset", "-diagRecordEnabled", "YES",
+            "-uiTestSeedSites", "\(siteOne)=\(latin);\(siteTwo)=\(russianPC);\(thirdSite)=\(hebrewPC)",
+        ]
+        flickey.launch() // isolated settings keep opt-in auto-fix off
+
+        func navigatePhysically(to host: String) {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(web.url(host), forType: .string)
+            postPhysicalShortcut(keyCode: 37, flags: .maskCommand) // ⌘L
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+            postPhysicalShortcut(keyCode: 9, flags: .maskCommand)  // ⌘V
+            postPhysicalShortcut(keyCode: 36, flags: [])           // Return
+        }
+
+        safari.activate()
+        step("Open English site \(siteOne)")
+        navigatePhysically(to: siteOne)
+        XCTAssertTrue(waitForActiveSite(siteOne), "English site did not load")
+        XCTAssertTrue(waitForSource(latin, 8))
+
+        step("Open Russian PC site \(siteTwo) in a second tab")
+        postPhysicalShortcut(keyCode: 17, flags: .maskCommand) // ⌘T
+        XCTAssertTrue(waitForActiveSite("New Tab"), "second tab did not open")
+        navigatePhysically(to: siteTwo)
+        XCTAssertTrue(waitForActiveSite(siteTwo), "Russian PC site did not load")
+        XCTAssertTrue(waitForSource(russianPC, 12), "site two should choose Russian PC")
+
+        step("Open Hebrew PC site \(thirdSite) in a third tab")
+        postPhysicalShortcut(keyCode: 17, flags: .maskCommand)
+        XCTAssertTrue(waitForActiveSite("New Tab"), "third tab did not open")
+        navigatePhysically(to: thirdSite)
+        let thirdDetected = waitForActiveSite(thirdSite)
+        if !thirdDetected {
+            let addressFields = safari.textFields.allElementsBoundByIndex.map {
+                "\($0.label)=\($0.value ?? "nil")"
+            }
+            step("Third-tab diagnostic: title=\(safari.windows.firstMatch.title), address fields=\(addressFields)")
+        }
+        XCTAssertTrue(thirdDetected, "third site did not load")
+        XCTAssertTrue(waitForSource(hebrewPC, 12), "site three should choose Hebrew PC")
+
+        for visit in 1...10 {
+            step("Three-site cycle \(visit): Hebrew → Russian PC → English → Russian PC → Hebrew")
+            postPhysicalShortcut(keyCode: 48, flags: [.maskControl, .maskShift])
+            XCTAssertTrue(waitForSource(russianPC, 8), "cycle \(visit), site two")
+            postPhysicalShortcut(keyCode: 48, flags: [.maskControl, .maskShift])
+            XCTAssertTrue(waitForSource(latin, 8), "cycle \(visit), site one")
+            postPhysicalShortcut(keyCode: 48, flags: .maskControl)
+            XCTAssertTrue(waitForSource(russianPC, 8), "cycle \(visit), site two return")
+            postPhysicalShortcut(keyCode: 48, flags: .maskControl)
+            XCTAssertTrue(waitForSource(hebrewPC, 8), "cycle \(visit), site three return")
+        }
+    }
+
     // MARK: - helpers
 
     private func navigate(to host: String, forceLatinBeforeTyping: Bool = true) {

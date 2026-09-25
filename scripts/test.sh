@@ -28,6 +28,7 @@
 #   continuous-safety-ui LIVE: valid text and password fields are untouched
 #   auto-switch-ui LIVE: correction, undo, and learned-block story
 #   app-switching-ui LIVE: forced/unforced app layout transitions
+#   customer-memory-ui LIVE: Terminal pinned to English plus three-site Safari memory
 #   spotlight-ui LIVE: validates physical typing and conversion in Spotlight
 #   core         the shared decision engine
 #   routing      app-activation routing + app rules
@@ -111,6 +112,16 @@ case "$COMPONENT" in
     u AutoSwitchUITests ;;
   app-switching-ui)
     u AppSwitchingUITests ;;
+  customer-memory-ui)
+    t MemorySoakTests; t SessionReplayTests/testRealTeamsSession_flapAndNonConversationViewsDoNotCorruptMemory
+    u AppSwitchingUITests/testTerminalPinnedToEnglishAcrossThreeLayouts
+    u AppSwitchingUITests/testTerminalReassertsEnglishAfterLateLayoutSelection
+    u AppSwitchingUITests/testTerminalHandoffDoesNotOverrideNextAppsLayout
+    u BrowserIntegrationUITests/testThreeLayoutsRemainPerSiteAcrossRepeatedTabSwitches ;;
+  customer-terminal-ui)
+    u AppSwitchingUITests/testTerminalPinnedToEnglishAcrossThreeLayouts
+    u AppSwitchingUITests/testTerminalReassertsEnglishAfterLateLayoutSelection
+    u AppSwitchingUITests/testTerminalHandoffDoesNotOverrideNextAppsLayout ;;
   spotlight-ui)
     u SpotlightTypingRigUITests; u SpotlightConversionUITests ;;
   core)
@@ -143,7 +154,7 @@ case "$COMPONENT" in
     WHOLE_UNIT=1; WHOLE_UI=1 ;;
   *)
     echo "Unknown component: '$COMPONENT'"
-    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui russian-ui arabic-ui continuous-ui continuous-tabs-ui continuous-firefox-tab-ui continuous-safety-ui auto-switch-ui app-switching-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
+    echo "Try: smoke browser browser-ui browser-ui-firefox teams teams-ui conversion fix-ui russian-ui arabic-ui continuous-ui continuous-tabs-ui continuous-firefox-tab-ui continuous-safety-ui auto-switch-ui app-switching-ui customer-memory-ui customer-terminal-ui spotlight-ui core routing apps shortcut input support menubar settings ui unit all"
     exit 2 ;;
 esac
 

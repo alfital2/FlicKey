@@ -1,23 +1,23 @@
 ## Status
 
-Branch `fix/app-memory-echo` (worktree `build/app-memory-echo-worktree`, off local `dev`) fixes "Remember last used" apps learning another app's forced layout under rapid app switching. It is installed on the user's Mac as local Developer ID signed QA build 0.6.0/76 (build number overridden on the command line only; `project.yml` still says 75). Build 75 is backed up at `build/app-memory-echo-worktree/build/FlicKey-75-backup.app`. Nothing pushed; `main`, public GitHub, and the appcast remain 0.5.6/build 60. The root worktree's uncommitted `fix/auto-fix-continuous-typing` work and the `dev` worktree's uncommitted UITest edits were left untouched.
+`fix/forced-layout-handoff` is an isolated branch/worktree based on `dev` (`a700397`) and includes the existing `fix/app-memory-echo` commit (`1e98ccc`) unchanged. It adds a bounded correction for a late previous-app input-source selection that could override a forced Terminal English rule. The code is tested in the disposable Tart VM only; local QA build 76 from the separate echo branch remains installed on the user's Mac. No merge, push, customer release, or `main` change occurred.
 
 ## Recent changes
 
-- Root cause (confirmed in the unified log at 23:48:17): Terminal forced English, WhatsApp activated ~70ms later, and Terminal's delayed English echo landed while WhatsApp was frontmost. AppWatcher's one-shot per-owner ignore token had already been overwritten by WhatsApp's apply, so it saved English as WhatsApp's last-used layout.
-- Added `ProgrammaticSwitchLedger`: a shared 0.8s window of recent FlicKey-made switches (target plus pre-switch source). AppWatcher and `ConversationMemoryCore` (browser sites, Teams) record through it and ignore any echo in it, including echoes from other owners. The Chrome↔WhatsApp variant in the same log is the cross-owner case.
-- `ProgrammaticSwitches.apply` re-issues a switch when an earlier request for a different source is still in flight, even if the current source already reads as the target.
-- Accepted trade-off: a genuine user change within 0.8s of arriving, to a source involved in a recent switch, is not learned.
+- `AppWatcher` tracks a forced activation for 0.9 seconds. Input-source notifications and checks at 0.15/0.4/0.75 seconds reapply the rule only while the same app remains frontmost. Reapplications use the shared programmatic-switch ledger so other apps do not learn them.
+- Added live Terminal pinned-English coverage for Russian PC/Hebrew PC visits and relaunch, a deterministic late Russian selection, and leaving Terminal for unforced TextEdit. Added a three-site Safari layout test and focused Tart runner actions from the dev QA worktree.
+- Tart results: 20 iterations of both main Terminal cases passed (40/40 tests, 240 alternating visits and 20 relaunches); customer-memory suite passed 2 unit and 4 UI tests, including 40 Safari tab switches; existing app-switching suite passed 5/5. Full unit suite passed 575/575 after restoring the VM's original ABC/Hebrew PC setup.
+- An initial full-unit run with Russian PC also enabled had six `LayoutConverterTests` failures because those older tests assume a two-layout cycle; this is a test-fixture limitation, not a new handoff failure. Restored the VM to ABC/Hebrew PC and stopped it.
 
 ## Open questions / blockers
 
-- The user's WhatsApp memory is still `ABC` from the pre-fix corruption; they need to set Hebrew once in WhatsApp.
-- Auto-fix and hotkey conversion switches are deliberately not recorded, so they are still learned as the app's layout (unchanged behavior).
+- The new branch has not been installed on the user's Mac or merged into `dev`; host QA and integration are pending. The older converter test fixtures should eventually state or enforce their two-layout precondition when a third language is enabled.
+- Release gates outside this fix remain notarized Sparkle update verification and broader host feedback.
 
 ## Next steps
 
-1. User QA of build 76: rapid WhatsApp↔Terminal and WhatsApp↔Chrome switching should keep WhatsApp Hebrew.
-2. If it holds, merge `fix/app-memory-echo` into `dev` and bump the real build number there.
-3. Continue the 0.6.0 release plan (notarized DMG, Sparkle update test from 0.5.6).
+1. Review/merge `fix/forced-layout-handoff` into `dev` after the other session's echo branch work is reconciled.
+2. Validate a local host build with Terminal, WhatsApp, and browser switching, then continue release checks.
+3. Improve the older two-layout converter test fixture separately so a three-layout VM run reports the intended coverage cleanly.
 
-_Last updated: 2026-09-25 by Claude Code (Opus 5.5)_
+_Last updated: 2026-09-26 by Codex_

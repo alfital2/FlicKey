@@ -16,6 +16,13 @@ final class AppWatcher {
         let mode: LearningMode
     }
 
+    private struct ForcedActivation {
+        let token: UUID
+        let sourceID: String
+        let pid: pid_t
+        let expiresAt: TimeInterval
+    }
+
     // Injected in Phase 5 to hand browser activations to TabMemory.
     var onBrowserActivated: ((NSRunningApplication) -> Void)?
     // Called when a non-browser (or EN/HE-forced) app becomes active, so
@@ -28,6 +35,9 @@ final class AppWatcher {
     private var observer: NSObjectProtocol?
     private let inputMonitor = InputSourceMonitor()
     private var learningTarget: LearningTarget?
+    // macOS can finish a previous app's layout selection after this app's
+    // activation. Keep a short, cancellable handoff for a fixed rule.
+    private var forcedActivation: ForcedActivation?
 
     func start() {
         inputMonitor.onChange = { [weak self] in
@@ -70,6 +80,7 @@ final class AppWatcher {
         observer = nil
         inputMonitor.stop()
         learningTarget = nil
+        forcedActivation = nil
     }
 
     // Routes an app to its input rule. Called for normal activations (the
@@ -92,12 +103,24 @@ final class AppWatcher {
         let bundleID = app.bundleIdentifier ?? "?"
         Diag.log(.appActivated(bundleID: bundleID))
         Diag.log(.routingDecision(bundleID: bundleID, decision: decision.diagKind))
+        forcedActivation = nil
 
         switch decision {
         case .force(let id):
             learningTarget = nil
             onLeftBrowser?()                 // releases both auto-controllers
+            let activation = ForcedActivation(
+                token: UUID(), sourceID: id, pid: app.processIdentifier,
+                expiresAt: ProcessInfo.processInfo.systemUptime + 0.9)
+            forcedActivation = activation
             apply(id, to: app)
+            // Notifications catch most late switches. These checks also catch
+            // a switch that lands without a delivered notification.
+            for delay in [0.15, 0.4, 0.75] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                    self?.reassertForcedLayout(for: activation)
+                }
+            }
         case .rememberApp:
             onLeftBrowser?()
             guard let matchedApp else { learningTarget = nil; return }
@@ -137,6 +160,12 @@ final class AppWatcher {
                                     frontmostPID: pid_t?,
                                     frontmostBundleID: String?) {
         guard let sourceID else { return }
+        // Correct the actual selected source before classifying this
+        // notification as an echo. A delayed prior-app change can be an echo
+        // of a different owner and still override this app's fixed rule.
+        if let forced = forcedActivation, frontmostPID == forced.pid {
+            reassertForcedLayout(for: forced)
+        }
         // Any recent FlicKey switch, including one made for the app the user
         // just left, echoes here after the next app is already frontmost.
         if ProgrammaticSwitches.isEcho(sourceID) { return }
@@ -152,6 +181,17 @@ final class AppWatcher {
         case .persistent:
             AppLastUsedInputStore.set(sourceID, for: target.app.memoryKey)
         }
+    }
+
+    private func reassertForcedLayout(for activation: ForcedActivation) {
+        guard forcedActivation?.token == activation.token,
+              ProcessInfo.processInfo.systemUptime < activation.expiresAt,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == activation.pid,
+              InputSourceManager.currentSourceID() != activation.sourceID
+        else { return }
+
+        Diag.log(.layoutSwitch(expected: activation.sourceID, applied: activation.sourceID))
+        ProgrammaticSwitches.apply(activation.sourceID)
     }
 }
 
