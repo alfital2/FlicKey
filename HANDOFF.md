@@ -1,26 +1,26 @@
 ## Status
 
-Public release 0.6.0/build 78 is prepared in `release/0.6.0` at `build/release-0.6.0-worktree`, based on the tested `fix/forced-layout-handoff` source. The universal Developer ID-signed app is built and verified, but NOT notarized or published. Public GitHub release and appcast remain 0.5.6/build 60. The user explicitly requested public release; automatic approval review separately blocked the Apple notarization upload, and an explicit approval question is pending. The root worktree has unrelated unfinished edits and must remain intact. The host is running public 0.5.6 from `build/released-v0.5.6`; QA build 77 remains in `/Applications/FlicKey.app`.
+Release 0.6.0/build 78 is prepared in `release/0.6.0` at `build/release-0.6.0-worktree`, based on tested `fix/forced-layout-handoff` source. The user approved public release and Apple notarization conditional on production trial enforcement. That condition is verified: all six exact signed-release trial UI cases passed. Apple notarization/package generation is in progress; nothing has been published yet. Public GitHub release and appcast remain 0.5.6/build 60. Root and dev worktrees contain unrelated unfinished changes; preserve them.
 
 ## Recent changes
 
-- Prepared build 78 and release notes covering multilingual conversion, opt-in auto-fix beta improvements, layout memory/handoff fixes, and entitlement recovery.
-- Fixed release packaging to notarize and staple the app before creating either distribution archive, so the Sparkle ZIP contains the app ticket; added an option to run release unit tests in Tart.
-- Verified 575/575 unit tests and 5/5 live conversion/undo UI tests in `flickey-ui`. Built native Intel/Apple Silicon Release, re-signed Sparkle and app with Developer ID, verified signatures, clean entitlements, and absence of coverage instrumentation. Logs are in the release worktree's `build/release-*.log`.
-- The password-based `flickey-notarize` profile fails. The existing API key at `~/.appstoreconnect/private_keys/AuthKey_UK666BK9RM.p8` works with issuer `15967b33-b9d4-439f-ac6b-bae719282d26` (found in the existing Framenook release manifest). No credential changes were made.
-- Prepared isolated website branch `release/0.6.0` in `build/release-site-worktree`; only its footer version is changed so far. Nothing pushed or published.
+- Prepared build 78 and release notes for multilingual conversion, opt-in auto-fix beta, layout memory/handoff fixes, and entitlement recovery.
+- Verified 575/575 unit tests, 5/5 live conversion/undo UI tests, and 6/6 tests of the actual signed release: fresh 30-day trial, active conversion, expired conversion blocked and purchase offered, QA unlock/reset flags ignored, clock rollback, and expiry while running. Successful log: `build/release-0.6.0-worktree/build/release-entitlement-tests.log`.
+- Added a mandatory pre-notarization trial gate to `scripts/build-dmg.sh`. The VM-only helper/test fixtures are outside the shipped app. Tests must seed data outside XCTest's sandbox and clear old preferences before importing each fixture.
+- Fixed packaging to notarize/staple the app before making either archive. Release is universal Intel/Apple Silicon, Developer ID signed, with clean entitlements and no profiling instrumentation. Its executable SHA-256 is `208014392469947a2617da399aaeb73d5d0ce7ca7aad49d8f93052735c79547b` before stapling (stapling does not change this binary).
+- The old QA entitlement bypass was removed previously in `7550993`; release test seams are compiled out. Existing grandfathered users keep their promised access; new users get 30 days.
+- Working notarization auth: existing API key `~/.appstoreconnect/private_keys/AuthKey_UK666BK9RM.p8`, issuer `15967b33-b9d4-439f-ac6b-bae719282d26`. The saved password profile fails. No credentials changed.
 
 ## Open questions / blockers
 
-- Await explicit user approval for uploading the compiled app to Apple's notarization service. Automatic review rejected it despite general release authorization; do not retry until approval arrives.
-- Exact notarized Sparkle archive and distribution/update verification remain required before publishing.
-- The dev worktree still contains a superseded provisional handoff guard and diagnostics; do not merge those over the tested forced-layout implementation. Earlier QA limitations include live messenger coverage requiring a logged-in guest and old converter fixtures assuming ABC/Hebrew only.
+- Await Apple notarization and final archive verification, then publish. No user approval remains outstanding.
+- Isolated website branch is in `build/release-site-worktree`; footer version is prepared, appcast is generated after packaging.
+- Prior QA limits remain: full live messenger coverage needs a logged-in guest; old converter unit fixtures assume ABC/Hebrew. Superseded provisional dev-worktree handoff changes must not overwrite the tested implementation.
 
 ## Next steps
 
-1. After Apple-upload approval, run the prepared `build/package-release.sh` from the release worktree with the existing API-key notarization environment variables. It resumes after successful build/sign/test and notarizes/staples the app and DMG.
-2. Produce/sign the Sparkle ZIP and appcast using the packaging section of `scripts/release.sh`, targeting the isolated site worktree. Verify both packages, signatures against the public 0.5.6 key, notarization tickets, and update behavior in the VM.
-3. Commit final handoffs, fast-forward/push main and tag v0.6.0, publish the GitHub assets and release notes, then push the website feed/version. Verify public downloads and live appcast before claiming completion.
-4. Stop the test VM and refresh both repo handoffs with published URLs and verification results. Preserve the root and dev worktree's unrelated edits.
+1. Finish the running `build/package-release.sh`, then run `build/package-update.sh` to sign the Sparkle ZIP and write the isolated site's feed.
+2. Verify archive signatures/tickets and the signature against the public 0.5.6 update key; publish main/tag/GitHub assets and the site feed/version.
+3. Verify live downloads/appcast, refresh handoffs with results, and stop the VM. Host remains on public 0.5.6 from `build/released-v0.5.6`; build 77 stays installed in Applications.
 
 _Last updated: 2026-09-26 by Codex_

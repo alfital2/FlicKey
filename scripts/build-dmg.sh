@@ -90,6 +90,11 @@ fi
 codesign --verify --deep --strict "$APP"
 echo "    signature OK, no instrumentation"
 
+# Exercise the actual signed app, without debug trial simulation, before any
+# upload or publication. Fixture writes happen only in the disposable VM.
+echo "==> Verifying production trial enforcement in the signed release"
+bash scripts/verify-release-trial.sh "$APP"
+
 # Staple the app itself before either archive is created. Stapling only the
 # DMG leaves the Sparkle ZIP without an offline-verifiable app ticket.
 NOTARY_AUTH=(--keychain-profile "flickey-notarize")
