@@ -47,7 +47,7 @@ targets:
         CODE_SIGN_ENTITLEMENTS: FlicKey.entitlements
         PRODUCT_BUNDLE_IDENTIFIER: com.talalfi.FlicKey
         MARKETING_VERSION: "0.6.0"
-        CURRENT_PROJECT_VERSION: "75"
+        CURRENT_PROJECT_VERSION: "78"
         ENABLE_HARDENED_RUNTIME: YES
       configs:
         # Keep developer-only diagnostics and explicit entitlement simulation

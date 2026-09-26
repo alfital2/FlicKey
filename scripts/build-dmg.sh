@@ -40,8 +40,12 @@ echo "==> Regenerating Xcode project from project.yml"
 xcodegen generate >/dev/null
 
 echo "==> Running tests"
-xcodebuild test -project "$APP_NAME.xcodeproj" -scheme "$APP_NAME" \
-  -destination 'platform=macOS' >/dev/null
+if [[ "${FLICKEY_RELEASE_TEST_VM:-0}" == 1 ]]; then
+  scripts/tart.sh unit
+else
+  xcodebuild test -project "$APP_NAME.xcodeproj" -scheme "$APP_NAME" \
+    -destination 'platform=macOS' >/dev/null
+fi
 
 echo "==> Building Release (via -target, no coverage instrumentation)"
 rm -rf "$BUILD_DIR"
@@ -86,6 +90,23 @@ fi
 codesign --verify --deep --strict "$APP"
 echo "    signature OK, no instrumentation"
 
+# Staple the app itself before either archive is created. Stapling only the
+# DMG leaves the Sparkle ZIP without an offline-verifiable app ticket.
+NOTARY_AUTH=(--keychain-profile "flickey-notarize")
+if [ -n "${FLICKEY_NOTARY_KEY_PATH:-}" ] && [ -n "${FLICKEY_NOTARY_KEY_ID:-}" ]; then
+  NOTARY_AUTH=(--key "$FLICKEY_NOTARY_KEY_PATH" --key-id "$FLICKEY_NOTARY_KEY_ID")
+  if [ -n "${FLICKEY_NOTARY_ISSUER:-}" ]; then
+    NOTARY_AUTH+=(--issuer "$FLICKEY_NOTARY_ISSUER")
+  fi
+fi
+echo "==> Notarizing and stapling the app for both distribution formats"
+ditto -c -k --keepParent "$APP" "$STAGE/notarization.zip"
+xcrun notarytool submit "$STAGE/notarization.zip" "${NOTARY_AUTH[@]}" --wait
+xcrun stapler staple "$APP"
+xcrun stapler validate "$APP"
+codesign --verify --deep --strict "$APP"
+rm "$STAGE/notarization.zip"
+
 echo "==> Packaging DMG (branded volume icon)"
 mkdir -p "$DIST_DIR"
 cp -R "$APP" "$STAGE/"
@@ -111,17 +132,7 @@ rm -f "$RW"
 hdiutil verify "$DIST_DIR/$APP_NAME.dmg" >/dev/null
 
 echo "==> Notarizing DMG"
-if [ -n "${FLICKEY_NOTARY_KEY_PATH:-}" ] && [ -n "${FLICKEY_NOTARY_KEY_ID:-}" ]; then
-  NOTARY_AUTH=(--key "$FLICKEY_NOTARY_KEY_PATH" --key-id "$FLICKEY_NOTARY_KEY_ID")
-  if [ -n "${FLICKEY_NOTARY_ISSUER:-}" ]; then
-    NOTARY_AUTH+=(--issuer "$FLICKEY_NOTARY_ISSUER")
-  fi
-  xcrun notarytool submit "$DIST_DIR/$APP_NAME.dmg" "${NOTARY_AUTH[@]}" --wait
-else
-  xcrun notarytool submit "$DIST_DIR/$APP_NAME.dmg" \
-    --keychain-profile "flickey-notarize" \
-    --wait
-fi
+xcrun notarytool submit "$DIST_DIR/$APP_NAME.dmg" "${NOTARY_AUTH[@]}" --wait
 
 echo "==> Stapling notarization ticket"
 xcrun stapler staple "$DIST_DIR/$APP_NAME.dmg"
