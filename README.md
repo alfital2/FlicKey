@@ -4,6 +4,10 @@ FlicKey is a macOS menu bar app for people who type in more than one language. W
 
 If you type Hebrew and English you know the moment: you write a whole sentence, look up, and it says `akuo vnmc` instead of שלום המצב. FlicKey catches this as it happens, converts what you typed, and flips the keyboard so you can keep going.
 
+## Source code
+
+The source code for FlicKey 0.7.0 and later is not published for now. Someone copied FlicKey's code, released it under their own name, and is selling it, which the license does not allow. Until that is resolved, new versions are released as signed, notarized binaries only. If that makes you uncomfortable installing new releases, I understand.
+
 ## What it does
 
 - Fixes wrong-layout typing automatically. After two confidently wrong words it converts the whole run, including names and short words that dictionaries miss, and switches the layout.
